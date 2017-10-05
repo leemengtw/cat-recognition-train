@@ -53,7 +53,7 @@ pip install jupyter_contrib_nbextensions
 
 ## Train a Convoluational Neural Network
 
-All the code for building the model will be included in the[notebook]("cat_recognizer.ipynb"). 
+All the code for building the model will be included in this [notebook](cat_recognizer.ipynb). 
 To actually execute code in the notebook, start a jupyter server:
 
 ```commandline
