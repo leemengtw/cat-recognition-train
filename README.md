@@ -43,24 +43,23 @@ pyenv local py3.6-ml-app
 Install libraries for training models and visualization.
 We will train our models using TensorFlow on jupyter notebook.
 ```commandline
-pip install numpy tensorflow jupyter scipy pillow matplotlib seaborn tqdm
+pip install numpy tensorflow jupyter scipy pillow matplotlib seaborn 
 ```
 
-In case you also want to use jupyter notebook extensions:
-```commandline
-pip install jupyter_contrib_nbextensions
-```
+
 
 ## Train a Convoluational Neural Network
 
 All the code for building the model will be included in this [notebook](cat_recognizer.ipynb). 
-To actually execute code in the notebook, start a jupyter server:
+If you want to execute the code in the notebook, start a jupyter server and install all the dependencies.
 
 ```commandline
+pip install jupyter_contrib_nbextensions ipywidgets
+jupyter nbextension enable --py widgetsnbextension
 jupyter notebook
 ```
 
-
+add a requirement.txts
 
 
 
