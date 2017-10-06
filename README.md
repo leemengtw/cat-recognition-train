@@ -1,8 +1,8 @@
 # Cat-recognition-app
-A cloud-based machine learning (ML) application recognize cats in pictures.
+A cloud-based machine learning (ML) application recognizing cats in pictures.
 
 This repository contain all the necessary python code required to build a ML application
-and deploy it on the AWS.
+and deploy it on the AWS end-to-end.
 
 ## Demo
 
@@ -17,7 +17,7 @@ So I decided to build a simple image classifier
 that is able to recognize cats and deploy it using AWS Lambda in order to simulate(or at least practice) 
 how to actually deploy a ML model in real world.
  
-
+ 
 
 ## Steps to follow
 - Build environment (on mac)
@@ -43,7 +43,7 @@ pyenv local py3.6-ml-app
 Install libraries for training models and visualization.
 We will train our models using TensorFlow on jupyter notebook.
 ```commandline
-pip install numpy tensorflow jupyter matplotlib seaborn tqdm
+pip install numpy tensorflow jupyter scipy pillow matplotlib seaborn tqdm
 ```
 
 In case you also want to use jupyter notebook extensions:
