@@ -50,7 +50,14 @@ pip install numpy tensorflow jupyter scipy pillow matplotlib seaborn
 
 ## Train a Convoluational Neural Network
 
-All the code for building the model will be included in this [notebook](cat_recognizer.ipynb). 
+In this part, we will train a CNN to classify cats' images from dogs' image
+using Kaggle dataset [Dogs vs. Cats](https://www.kaggle.com/c/dogs-vs-cats/data). We will do the following things:
+- Load, resize and normalize the images
+- Create training/valid set
+- Train a CNN model
+- Serialize the model for deploy
+
+All steps described above will be included in the notebook [cat_recognizer](cat_recognizer.ipynb). 
 If you want to execute the code in the notebook, start a jupyter server and install all the dependencies.
 
 ```commandline
@@ -59,7 +66,9 @@ jupyter nbextension enable --py widgetsnbextension
 jupyter notebook
 ```
 
-add a requirement.txts
+
+## Deploy trained model
+
 
 
 
