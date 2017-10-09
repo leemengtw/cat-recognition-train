@@ -2,6 +2,7 @@ import os
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
+import tensorflow as tf
 from scipy.misc import imread, imresize
 
 
@@ -14,7 +15,8 @@ def read_image_and_resize(path, size=(128, 128), debug=False):
 
     img_resized = imresize(img, size)
     if debug:
-        print('Image resized from {} to {}'.format(img.shape, img_resized.shape))
+        print('Image resized from {} to {}'
+              .format(img.shape, img_resized.shape))
         plt.figure()
         plt.subplot(1, 2, 1)
         plt.imshow(img)
@@ -93,3 +95,61 @@ def show_images_horizontally(images, labels=[], lookup_label=None,
             plt.title(lookup_label[labels[i][0]])
         imshow(images[i], cmap='Greys_r')
         axis('off')
+
+
+def freeze_graph(
+        out_path,
+        graph=None,
+        sess=None,
+        meta_path=None,
+        ckpt_path=None,
+        saver=None):
+    """
+    Freeze a trained model to a static graph for only prediction.
+    If graph is provided, sess should be provided too, vice versa, indicating
+    that saving freshly trained model to a frozen graph. The passed session
+    should be using the passed graph and be sure that the variables have been
+    initialized.
+    If meta_path is provided, ckpt_path should be provided too, vice versa,
+    indicating that saving previously saved dynamic checkpoint to static graph.
+    Parameters:
+    -----------
+    out_path: path to save your frozen graph (including file name).
+    graph: tf graph to load for graph definition.
+    sess: tf session to load for current variables status.
+    meta_path: saved checkpoint meta graph for graph definition.
+
+
+    Returns:
+    --------
+    X: ndarray of shape (#images, height, width, #channel)
+    y: ndarray of shape (#images, label)
+    """
+    assert (graph is None) == (sess is None), \
+        "graph and sess should be given simultaneously;\
+         otherwise don't give either one."
+    assert (meta_path is None) == (ckpt_path is None), \
+        "meta_path and ckpt_path should be given simultaneously;\
+         otherwise don't give either one."
+    assert (graph is None) ^ (meta_path is None), \
+        "Either use current graph or use meta data as def."
+
+    close_sess = False
+
+    if meta_path is not None:
+        tf.reset_default_graph()
+        graph = tf.get_default_graph()
+        sess = tf.Session(graph=graph)
+        saver = tf.train.import_meta_graph(meta_path, graph=graph)
+        saver.restore(sess, ckpt_path)
+        close_sess = True
+    in_graph_def = graph.as_graph_def()
+    out_graph_def = tf.graph_util.convert_variables_to_constants(
+            sess,
+            in_graph_def,
+            ['tf_new_y_pred'])
+    with tf.gfile.GFile(out_path, 'wb') as f:
+        f.write(out_graph_def.SerializeToString())
+
+    if close_sess:
+        sess.close()
