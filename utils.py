@@ -99,13 +99,14 @@ def show_images_horizontally(images, labels=[], lookup_label=None,
 
 def freeze_graph(
         out_path,
+        out_node_name,
         graph=None,
         sess=None,
         meta_path=None,
         ckpt_path=None,
         saver=None):
     """
-    Freeze a trained model to a static graph for only prediction.
+    Freeze a trained model to a static graph for needed node only.
     If graph is provided, sess should be provided too, vice versa, indicating
     that saving freshly trained model to a frozen graph. The passed session
     should be using the passed graph and be sure that the variables have been
@@ -115,6 +116,7 @@ def freeze_graph(
     Parameters:
     -----------
     out_path: path to save your frozen graph (including file name).
+    out_node_name: name of needed ops node. Should be list or str.
     graph: tf graph to load for graph definition.
     sess: tf session to load for current variables status.
     meta_path: saved checkpoint meta graph for graph definition.
@@ -125,6 +127,8 @@ def freeze_graph(
     X: ndarray of shape (#images, height, width, #channel)
     y: ndarray of shape (#images, label)
     """
+    assert isinstance(out_node_name, str) or isinstance(out_node_name, list), \
+        "out_node_name should be a str or a list of str"
     assert (graph is None) == (sess is None), \
         "graph and sess should be given simultaneously;\
          otherwise don't give either one."
@@ -134,6 +138,8 @@ def freeze_graph(
     assert (graph is None) ^ (meta_path is None), \
         "Either use current graph or use meta data as def."
 
+    if isinstance(out_node_name, str):
+        out_node_name = [out_node_name]
     close_sess = False
 
     if meta_path is not None:
@@ -147,7 +153,7 @@ def freeze_graph(
     out_graph_def = tf.graph_util.convert_variables_to_constants(
             sess,
             in_graph_def,
-            ['tf_new_y_pred'])
+            out_node_name)
     with tf.gfile.GFile(out_path, 'wb') as f:
         f.write(out_graph_def.SerializeToString())
 
