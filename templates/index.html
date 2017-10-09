@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}
+  Cat Recognizer
+{% endblock %}
+{% block page_content %}
+
+<div class="row">
+    <div class="col-md-6">
+        <div>
+            <h3>Upload new Images</h3>
+            <form method=post enctype=multipart/form-data>
+              <input type=file name=file>
+              <input type=submit value=Upload>
+            </form>
+            <img src="{{cur_image_path}}" class="img-responsive">
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div>
+
+            <h3>Show Prediction History</h3>
+
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}

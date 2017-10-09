@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}
+  404
+{% endblock %}
+
+{% block page_content %}
+
+  <div class="row">
+
+    <div class="col-md-12">
+      <img src="{{ url_for('static', filename = '404.png')  }}" style="margin: 0 auto" class="img-responsive" type="image/png" alt="Page not Found"/>
+    </div>
+
+  </div>
+
+{% endblock %}

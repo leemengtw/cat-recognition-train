@@ -13,6 +13,7 @@ and deploy it on the AWS end-to-end.
 Although there are already lots of good tutorials telling you how to build a machine learning model, 
 I feel that there is little explanation about how to actually deploy your model as a web application.
 
+
 So I decided to build a simple image classifier
 that is able to recognize cats and deploy it using AWS Lambda in order to simulate(or at least practice) 
 how to actually deploy a ML model in real world.
@@ -21,8 +22,12 @@ how to actually deploy a ML model in real world.
 
 ## Steps to follow
 - Build environment (on mac)
-- Train a Convoluational Neural Network(CNN)
-- Deploy trained model
+- Train a Convolutional Neural Network as image classifier
+- Build a Flask application
+    * Allow users upload images
+    * Predict whether the images are cats using model trained previously 
+- Deploy the application on AWS 
+
 
 
 
@@ -55,20 +60,53 @@ using Kaggle dataset [Dogs vs. Cats](https://www.kaggle.com/c/dogs-vs-cats/data)
 - Load, resize and normalize the images
 - Create training/valid set
 - Train a CNN model
-- Serialize the model for deploy
+- Serialize the model for later deployment
 
 All steps described above will be included in the notebook [cat_recognizer](cat_recognizer.ipynb). 
-If you want to execute the code in the notebook, start a jupyter server and install all the dependencies.
+If you want to execute the code in the notebook, install all the extra dependencies.
 
 ```commandline
 jupyter nbextension enable --py widgetsnbextension
+```
+
+Start a jupyter server. 
+
+```commandline
+
 jupyter notebook
 ```
 
+And you should be able to open and run the notebook at localhost:8888.
 
-## Deploy trained model
+## Build a Flask application
+
+In this part, we will build a simple flask web application which allow users
+to upload images and predict whether there are cats in the images using the
+model we trained in previous part.
+
+We will need extra dependencies for the application:
+```commandline
+pip install flask flask-bootstrap boto3 zappa 
+```
+
+To start the flask application:
+
+```commandline
+python app.py
+```
+
+And you should be able to view the app at localhost:5000 using the browsers.
 
 
+
+
+
+## Deploy the application on AWS 
+
+We will deploy our model on AWS using AWS Lambda. 
+Again, extra dependencies for deploying the application. 
+
+To be continued.
 
 
 ## Miscellaneous
@@ -76,3 +114,18 @@ jupyter notebook
 ```commandline
 xcode-select --install
 ```
+
+- Dependencies 
+
+To install all the dependencies listed in [requirements.txt](requirements.txt) 
+all at once:
+
+```commandline
+pip install -r requirements.txt
+```
+
+
+
+
+
+
