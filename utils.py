@@ -103,16 +103,16 @@ def freeze_graph(
         graph=None,
         sess=None,
         meta_path=None,
-        ckpt_path=None,
-        saver=None):
+        ckpt_path=None):
     """
-    Freeze a trained model to a static graph for needed node only.
+    Freeze a trained model to a static graph file for needed node only.
     If graph is provided, sess should be provided too, vice versa, indicating
     that saving freshly trained model to a frozen graph. The passed session
     should be using the passed graph and be sure that the variables have been
     initialized.
     If meta_path is provided, ckpt_path should be provided too, vice versa,
     indicating that saving previously saved dynamic checkpoint to static graph.
+
     Parameters:
     -----------
     out_path: path to save your frozen graph (including file name).
@@ -120,12 +120,6 @@ def freeze_graph(
     graph: tf graph to load for graph definition.
     sess: tf session to load for current variables status.
     meta_path: saved checkpoint meta graph for graph definition.
-
-
-    Returns:
-    --------
-    X: ndarray of shape (#images, height, width, #channel)
-    y: ndarray of shape (#images, label)
     """
     assert isinstance(out_node_name, str) or isinstance(out_node_name, list), \
         "out_node_name should be a str or a list of str"
