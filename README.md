@@ -7,6 +7,7 @@ and deploy it on the AWS end-to-end.
 ## Demo
 
 
+![Cover](images/cover.png)
 
 
 ## Introduction
