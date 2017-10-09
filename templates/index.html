@@ -12,9 +12,9 @@
               <input type=file name=file>
               <input type=submit value=Upload>
             </form>
-            {% if prob > 50 %}
+            {% if prob is defined and prob > 50 %}
                 <h4>We're {{prob}} % sure it's a cat image :D</h4>
-            {% else %}
+            {% elif prob is defined %}
                 <h4>We don't think it's a cat image :O</h4>
             {% endif %}
             <img src="{{cur_image_path}}" class="img-responsive">
