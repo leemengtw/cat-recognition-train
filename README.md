@@ -6,7 +6,7 @@ and deploy it on the AWS end-to-end.
 
 ## Demo
 
-<img src="images/cover.png" alt="Cover" style="width: 50%;"/>
+<img src="images/cover.png" alt="Cover" width="50%"/>
 
 
 ## Introduction
