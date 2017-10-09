@@ -1,13 +1,14 @@
 import os
-import boto3
-import tensorflow as tf
 from flask import Flask, flash, request, json, render_template, redirect, url_for, send_from_directory
 from werkzeug.utils import secure_filename
 from flask_bootstrap import Bootstrap
+from predict import predict_on_new_image
 
 BUCKET_NAME = 'machine-learning-models-dev'
 MODEL_FILE_NAME = 'purchase-boost/random_forest_v1.pkl'
 MODEL_LOCAL_PATH = '/tmp/' + MODEL_FILE_NAME.split('/')[-1]
+
+
 
 
 UPLOAD_FOLDER = 'static/uploaded_images'
@@ -23,7 +24,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
 @app.route('/', methods=['GET', 'POST'])
-def upload_image():
+def make_prediction():
     if request.method == 'POST':
         # check if the post request has the file part
         if 'file' not in request.files:
@@ -37,10 +38,23 @@ def upload_image():
             return redirect(request.url)
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename) # security concerns
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            return render_template('index.html', cur_image_path=uploaded_image(filename))
-            # return redirect(url_for('uploaded_file',
-            #                         filename=filename))
+
+            # save image locally
+            if not os.path.exists(app.config['UPLOAD_FOLDER']):
+                os.makedirs(app.config['UPLOAD_FOLDER'])
+
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+
+            # get prediction
+            prob = predict_on_new_image(file_path, size=(64, 64))
+
+
+
+            return render_template('index.html',
+                prob=float('{:.1f}'.format(prob * 100)),
+                cur_image_path=uploaded_image_path(filename))
+
     return render_template('index.html')
 
 
@@ -50,11 +64,9 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-    # return json.dumps({'status': 'success', 'debug': True})
 
-
-def uploaded_image(filename):
-    """generate url for user uploaded image"""
+def uploaded_image_path(filename):
+    """generate file path for user uploaded image"""
     return '/'.join((app.config['UPLOAD_FOLDER'], filename))
 
 
