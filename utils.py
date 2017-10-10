@@ -4,14 +4,29 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from scipy.misc import imread, imresize
+from PIL import Image
 
 
-def read_image_and_resize(path, size=(128, 128), debug=False):
+def read_image_and_resize(file_path, size=(128, 128), debug=False):
     """
-    Read a image file as a numpy.ndarray, resize it and return the resized
-    images.
+    Read a image file as a numpy.ndarray, return the resized images.
+
+    Parameters
+    ----------
+    file_path: str
+        relative file path of the image
+    size: tuple
+        final image size after resize operation
+
+    Returns
+    -------
+    img_resized: numpy.ndarray of (size[0], size[1], #channels)
     """
-    img = imread(path)
+    img = imread(file_path)
+
+    # remove alpha channel for .png
+    if img.shape[2] == 4:
+        img = imread(get_rgb_image(file_path))
 
     img_resized = imresize(img, size)
     if debug:
@@ -39,15 +54,15 @@ def load_image_dataset(
     Once this functions is run, 2 .npy files will be saved in dir_path so
     the image reading and resizeing procedure won't be executed next time.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     dir_path: relative path to image folder
     size: final image size after resize operation
     xname: .npy file of resized images if this function has been run before.
     xname: .npy file of labels if this function has been run before.
 
-    Returns:
-    --------
+    Returns
+    -------
     X: ndarray of shape (#images, height, width, #channel)
     y: ndarray of shape (#images, label)
     """
@@ -113,8 +128,8 @@ def freeze_graph(
     If meta_path is provided, ckpt_path should be provided too, vice versa,
     indicating that saving previously saved dynamic checkpoint to static graph.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     out_path: path to save your frozen graph (including file name).
     out_node_name: name of needed ops node. Should be list or str.
     graph: tf graph to load for graph definition.
@@ -153,3 +168,42 @@ def freeze_graph(
 
     if close_sess:
         sess.close()
+
+
+def get_rgb_image(file_path, delete_original_image=True):
+    """
+    Remove image's alpha channel and return the path of the new
+    transformed jpg image
+
+    Parameters
+    ----------
+    file_path: str
+        relative path to the image with alpha channel
+    delete_original_image: bool
+        set to true to remove original image after transformation
+
+    Returns
+    -------
+    transformed_file_path; str
+        relative path to the image without alpha channel
+    """
+    png = Image.open(file_path)
+    png.load()  # required for png.split()
+
+    background = Image.new("RGB", png.size, (255, 255, 255))
+    background.paste(png, mask=png.split()[3])  # 3 is the alpha channel
+
+    transformed_file_path = file_path.replace('.png', '.jpg')
+    background.save(transformed_file_path, 'JPEG', quality=80)
+
+    # delete original image
+    if delete_original_image:
+        os.remove(file_path)
+
+    return transformed_file_path
+
+
+
+
+
+

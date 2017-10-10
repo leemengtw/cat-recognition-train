@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from utils import read_image_and_resize
+from utils import read_image_and_resize, get_rgb_image
 from settings import META_PATH, SAVE_PATH, TRAIN_X_MEAN_NPY, TRAIN_X_STD_NPY
 
 
@@ -14,8 +14,8 @@ def predict_on_new_image(file_path, size=(64, 64)):
         relative path where the image is stored
     size: final image size after resize operation
 
-    Returns:
-    --------
+    Returns
+    -------
     prob: float ranged from (0, 1)
         The probability of the image being a 'cat' image
 
@@ -31,6 +31,7 @@ def predict_on_new_image(file_path, size=(64, 64)):
 
     # reshape image to fit in graph
     image = image.reshape(1, image.shape[0], image.shape[1], image.shape[2])
+
 
     # load model and make prediction
     with tf.Session() as sess:

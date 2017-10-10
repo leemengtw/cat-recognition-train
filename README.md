@@ -1,5 +1,5 @@
 # Cat-recognition-app
-A cloud-based machine learning (ML) application recognizing cats in pictures.
+A cloud-based machine learning application recognizing cats in pictures.
 
 This repository contain all the necessary python code required to build a ML application
 and deploy it on the AWS end-to-end.
