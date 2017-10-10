@@ -1,7 +1,6 @@
 import os
 import glob
 import numpy as np
-import matplotlib.pyplot as plt
 import tensorflow as tf
 from scipy.misc import imread, imresize
 from PIL import Image
@@ -30,6 +29,7 @@ def read_image_and_resize(file_path, size=(128, 128), debug=False):
 
     img_resized = imresize(img, size)
     if debug:
+        import matplotlib.pyplot as plt
         print('Image resized from {} to {}'
               .format(img.shape, img_resized.shape))
         plt.figure()
@@ -201,9 +201,3 @@ def get_rgb_image(file_path, delete_original_image=True):
         os.remove(file_path)
 
     return transformed_file_path
-
-
-
-
-
-

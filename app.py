@@ -1,19 +1,16 @@
 import os
-from flask import Flask, flash, request, json, render_template, redirect, url_for, send_from_directory
+from flask import Flask, flash, request, json,\
+        render_template, redirect, url_for, send_from_directory
 from werkzeug.utils import secure_filename
 from flask_bootstrap import Bootstrap
-from predict import predict_on_new_image
+from predict import Predictor
 
 BUCKET_NAME = 'machine-learning-models-dev'
 MODEL_FILE_NAME = 'purchase-boost/random_forest_v1.pkl'
 MODEL_LOCAL_PATH = '/tmp/' + MODEL_FILE_NAME.split('/')[-1]
 
-
-
-
 UPLOAD_FOLDER = 'static/uploaded_images'
 ALLOWED_EXTENSIONS = set(['png', 'jpg', 'jpeg'])
-
 
 app = Flask(__name__)
 bootstrap = Bootstrap(app)
@@ -21,6 +18,7 @@ bootstrap = Bootstrap(app)
 app.secret_key = 'some_secret'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
+predictor = Predictor()
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -37,7 +35,7 @@ def make_prediction():
             flash('No selected file')
             return redirect(request.url)
         if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename) # security concerns
+            filename = secure_filename(file.filename)  # security concerns
 
             # save image locally
             if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -47,16 +45,14 @@ def make_prediction():
             file.save(file_path)
 
             # get prediction
-            prob = predict_on_new_image(file_path, size=(64, 64))
+            prob = predictor.predict(file_path)
 
-
-
-            return render_template('index.html',
-                prob=float('{:.1f}'.format(prob * 100)),
-                cur_image_path=uploaded_image_path(filename))
+            return render_template(
+                    'index.html',
+                    prob=float('{:.1f}'.format(prob * 100)),
+                    cur_image_path=uploaded_image_path(filename))
 
     return render_template('index.html')
-
 
 
 def allowed_file(filename):
@@ -68,7 +64,6 @@ def allowed_file(filename):
 def uploaded_image_path(filename):
     """generate file path for user uploaded image"""
     return '/'.join((app.config['UPLOAD_FOLDER'], filename))
-
 
 
 @app.route('/uploads/<filename>')
@@ -92,7 +87,7 @@ def upload_file():
             flash('No selected file')
             return redirect(request.url)
         if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename) # security concerns
+            filename = secure_filename(file.filename)  # security concerns
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
             return redirect(url_for('uploaded_file',
                                     filename=filename))
@@ -107,8 +102,6 @@ def upload_file():
     '''
 
 
-
-
 @app.route('/test', methods=['POST'])
 def index():
     payload = json.loads(request.get_data().decode('utf-8'))
@@ -116,18 +109,16 @@ def index():
     return json.dumps(prediction)
 
 
-
 def load_model():
     """Load model stored in S3 for making prediction.
-    Make sure to update newest model for correct predictions. If model is downloaded
-    in previous execution, use existing model.
+    Make sure to update newest model for correct predictions.
+    If model is downloaded in previous execution, use existing model.
 
     Return:
     model object
     """
     s3 = boto3.resource('s3')
     bucket = s3.Bucket(BUCKET_NAME)
-
 
     if not os.path.isfile(MODEL_LOCAL_PATH):
         bucket.download_file(MODEL_FILE_NAME, MODEL_LOCAL_PATH)
