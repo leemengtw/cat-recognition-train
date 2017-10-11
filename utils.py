@@ -170,7 +170,7 @@ def freeze_graph(
         sess.close()
 
 
-def get_rgb_image(file_path, delete_original_image=True):
+def get_rgb_image(file_path, delete_original_image=False):
     """
     Remove image's alpha channel and return the path of the new
     transformed jpg image
