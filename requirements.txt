@@ -1,12 +1,14 @@
 appnope==0.1.0
 argcomplete==1.9.2
+awscli==1.11.168
 base58==0.2.4
 bleach==1.5.0
 boto3==1.4.7
-botocore==1.7.14
+botocore==1.7.26
 certifi==2017.7.27.1
 chardet==3.0.4
 click==6.7
+colorama==0.3.7
 cycler==0.10.0
 decorator==4.1.2
 docutils==0.14
@@ -17,6 +19,7 @@ Flask==0.12.2
 Flask-Bootstrap==3.3.7.1
 future==0.16.0
 futures==3.1.1
+gunicorn==19.7.1
 hjson==3.0.0
 html5lib==0.9999999
 idna==2.6
@@ -59,6 +62,7 @@ placebo==0.8.1
 prompt-toolkit==1.0.15
 protobuf==3.4.0
 ptyprocess==0.5.2
+pyasn1==0.3.7
 Pygments==2.2.0
 pyparsing==2.2.0
 python-dateutil==2.6.1
@@ -68,6 +72,7 @@ PyYAML==3.12
 pyzmq==16.0.2
 qtconsole==4.3.1
 requests==2.18.4
+rsa==3.4.2
 s3transfer==0.1.11
 scipy==0.19.1
 seaborn==0.8.1
