@@ -7,7 +7,7 @@ from settings import META_PATH, SAVE_PATH, PB_PATH,\
 
 
 class Predictor():
-    """ A session wrapper which predits catness given an image.
+    """ A session wrapper which predicts catness given an image.
 
     Argument:
         size: desired image resize target.
