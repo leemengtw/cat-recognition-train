@@ -1,5 +1,6 @@
 import os
 import glob
+import pickle
 import numpy as np
 import tensorflow as tf
 from scipy.misc import imread, imresize
@@ -39,6 +40,51 @@ def read_image_and_resize(file_path, size=(128, 128), debug=False):
         plt.imshow(img_resized)
 
     return img_resized
+
+
+def load_image_dataset_to_pickle(
+        dir_path='datasets/train/',
+        xname='features.pkl',
+        yname='targets.npy'):
+    """
+    If first run, read all the images in the specifed directory
+    as X and their corresponding labels as y.
+    `y = 0` indicates that it's a dog image, and `y = 1` indicates cat
+    otherwise.
+    Once this functions is run, a .npy file (for y) and
+    a .pkl (for X: list of img arrays) will be saved in dir_path so
+    the image reading and resizeing procedure won't be executed next time.
+
+    Parameters
+    ----------
+    dir_path: relative path to image folder
+    xname: .pkl file of resized images if this function has been run before.
+    xname: .npy file of labels if this function has been run before.
+
+    Returns
+    -------
+    X: ndarray of shape (#images, height, width, #channel)
+    y: ndarray of shape (#images, label)
+    """
+    x_path = os.path.join(dir_path, xname)
+    y_path = os.path.join(dir_path, yname)
+    if os.path.exists(x_path) and os.path.exists(y_path):
+        with open(x_path, 'rb') as f:
+            X = pickle.load(f)
+        return X, np.load(y_path)  # X is a list of different sized np arrays.
+    X, y = [], []
+    all_img_files = glob.glob(os.path.join(dir_path, '*.jpg'))
+    for img_file in all_img_files:
+        img = imread(img_file)
+        label = 0 if 'dog' in img_file else 1
+        X.append(img)
+        y.append(label)
+    with open(x_path, 'wb') as f:
+        pickle.dump(X, f)
+        print('list of imgs saved in %s' % x_path)
+    y = np.array(y).reshape(-1, 1)
+    np.save(y_path, y)
+    return X, y
 
 
 def load_image_dataset(
