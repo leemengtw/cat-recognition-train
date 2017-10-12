@@ -1,3 +1,4 @@
+import glob
 import os
 import numpy as np
 import tensorflow as tf
@@ -42,6 +43,21 @@ class Predictor():
         """
         img = read_image_and_resize(file_path, self.size).astype('float32')
         img = ((img - self.train_mean) / self.train_std)
+        pred = self.sess.run(
+                'tf_new_y_pred:0',
+                {'tf_new_X:0': img.reshape(1, *img.shape)})
+        return pred.squeeze()
+
+    def predict_np(self, img):
+        """ Predict catness given an image.
+
+        Argument:
+            file_path: path to desired image file.
+
+        Returns:
+            prob: probability of catness given the image.
+        """
+        img = ((img.astype('float32') - self.train_mean) / self.train_std)
         pred = self.sess.run(
                 'tf_new_y_pred:0',
                 {'tf_new_X:0': img.reshape(1, *img.shape)})
@@ -94,3 +110,22 @@ def predict_on_new_image(file_path, size=(64, 64)):
 
     prob = np.squeeze(new_y_pred)
     return prob
+
+
+def gen_kaggle_sub():
+    xpaths = [os.path.join('datasets', 'test1', '%d.jpg' % i) for i in range(1, 12501)]
+    number = [i for i in range(1, 12501)]
+    out_f = 'id,label'
+    p = Predictor()
+    for idx, xpath in zip(number, xpaths):
+        img = read_image_and_resize(xpath, size=(64, 64))
+        pred = 1 - p.predict_np(img).squeeze()
+        print(xpath, pred, end='\r')
+        out_f += '\n%d,%f' % (idx, pred)
+    with open('submission.csv', 'w') as f:
+        f.write(out_f)
+    print('\nDone')
+
+
+if __name__ == '__main__':
+    gen_kaggle_sub()
