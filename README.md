@@ -1,5 +1,5 @@
 # Cat-recognition-app
-A flask app recognizing cats using Tensorflow
+A flask app recognizing cats using Tensorflow.
 
 This repository contain all the necessary python code required to build a production-ready ML application that able to identify cats in image.
 
@@ -18,14 +18,18 @@ So we decided to build a simple image classifier
 that is able to recognize cats and deploy it in order to simulate(or at least practice)
 how to actually deploy a ML model in real world.
 
+We will also use [TensorBoard](https://www.tensorflow.org/get_started/summaries_and_tensorboard) to visualize how our model is learning to gain more insight.
+
 
 ## Table of contents
 - Build environment (on mac)
 - Train a Convolutional Neural Network as image classifier
+- Visualizing Learning using Tensorboard
 - Build a Flask application
     * Allow users upload images
     * Make predictions using trained model
 - Deploy the application on Heroku
+
 
 ## Build environment (on mac)
 We will use python 3.6 and [pyenv](https://github.com/pyenv/pyenv) to management our environment.
@@ -70,6 +74,26 @@ jupyter notebook
 ```
 
 And you should be able to open and run the notebook at localhost:8888.
+
+## Visualizing Learning using Tensorboard
+
+When training the model defined in the [cat_recognizer](cat_recognizer.ipynb), in addition to the reported accuracy messages showed in the notebook, you may be wondering:
+- how do our neural network look like?
+- what kind of images do we actually put into the model?
+- do model improve during training?
+
+These questions can be answered or better understood by viewing [Tensorboard](https://www.tensorflow.org/get_started/summaries_and_tensorboard). To open the tensorboard for this repo, enter:
+
+```commandline
+tensorboard --logdir=/tmp/tensorboard/cat-recognizer/
+```
+
+And you should be able to see all the interesting things on `localhost:6006`:
+
+### Images used for training
+
+<img src="images/training_images_on_tensorboard.png" alt="Cover" width="50%"/>
+
 
 ## Build a Flask application
 
@@ -141,6 +165,9 @@ And you should be able to see the application on `https://YOUR-APPLICATION-NUM.h
 ```commandline
 xcode-select --install
 ```
+
+
+
 
 - Dependencies
 
