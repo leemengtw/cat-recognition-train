@@ -7,7 +7,11 @@ This repository contain all the necessary python code required to build a produc
 
 It may take some time to load the application first time because we have lots of dependencies.
 
-<img src="images/cover.png" alt="Cover" width="50%"/>
+<p align="center">
+  <img src="images/cover.png" alt="Cover" width="50%"/>
+  <caption><center> <u>Figure 1</u>: Snapshot of the [cat recognizer app](https://damp-anchorage-60936.herokuapp.com/)</center></caption>
+</p>
+
 
 ## Background
 Although there are lots of good tutorials telling you how to build a machine learning model,
@@ -90,9 +94,30 @@ tensorboard --logdir=/tmp/tensorboard/cat-recognizer/
 
 And you should be able to see all the interesting things on `localhost:6006`:
 
-### Images used for training
+### Neural Network structure
 
-<img src="images/training_images_on_tensorboard.png" alt="Cover" width="50%"/>
+<p align="center">
+  <img src="images/first_naive_nn.png" >
+  <caption><center> <u>Figure 2</u>: Computation graph on Tensorboard</center></caption>
+</p>
+
+Notice here some nodes (e.g. save, evaluation) are removed for clarity.
+
+### Model Performance
+
+<p align="center">
+  <img src="images/scalars_on_tensor_board.png" >
+  <caption><center> <u>Figure 3</u>: Accuracy and loss of trained model on Tensorboard</center></caption>
+</p>
+
+
+### Images used for Training
+
+<p align="center">
+  <img src="images/training_images_on_tensorboard.png" >
+  <caption><center> <u>Figure 4</u>: Images used in a mini-batch</center></caption>
+</p>
+
 
 
 ## Build a Flask application
