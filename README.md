@@ -9,7 +9,7 @@ It may take some time to load the application first time because we have lots of
 
 <p align="center">
   <img src="images/cover.png" alt="Cover" width="50%"/>
-  <caption><center> <u>Figure 1</u>: Snapshot of the [cat recognizer app](https://damp-anchorage-60936.herokuapp.com/)</center></caption>
+  <b> <u>Figure 1</u>: Snapshot of the [cat recognizer app](https://damp-anchorage-60936.herokuapp.com/)</b>
 </p>
 
 
@@ -98,8 +98,9 @@ And you should be able to see all the interesting things on `localhost:6006`:
 
 <p align="center">
   <img src="images/first_naive_nn.png" >
-  <caption><center> <u>Figure 2</u>: Computation graph on Tensorboard</center></caption>
+
 </p>
+<caption><center> <u>Figure 2</u>: Computation graph on Tensorboard</center></caption>
 
 Notice here some nodes (e.g. save, evaluation) are removed for clarity.
 
@@ -107,7 +108,7 @@ Notice here some nodes (e.g. save, evaluation) are removed for clarity.
 
 <p align="center">
   <img src="images/scalars_on_tensor_board.png" >
-  <caption><center> <u>Figure 3</u>: Accuracy and loss of trained model on Tensorboard</center></caption>
+  <caption><u>Figure 3</u>: Accuracy and loss of trained model on Tensorboard</caption>
 </p>
 
 
