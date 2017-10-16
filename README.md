@@ -8,10 +8,9 @@ This repository contain all the necessary python code required to build a produc
 It may take some time to load the application first time because we have lots of dependencies.
 
 <p align="center">
-  <img src="images/cover.png" alt="Cover" width="50%"/>
-  <caption><u>Figure 1</u>: Snapshot of the <a href="https://damp-anchorage-60936.herokuapp.com/" target="_blank">cat recognizer app</a></caption>
-</p>
+  <a href="https://damp-anchorage-60936.herokuapp.com/" target="_blank"><img src="images/cover.png" alt="Cover" width="50%"/></a>
 
+</p>
 
 ## Background
 Although there are lots of good tutorials telling you how to build a machine learning model,
@@ -97,8 +96,7 @@ And you should be able to see all the interesting things on `localhost:6006`:
 ### Neural Network structure
 
 <p align="center">
-  <img src="images/first_naive_nn.png" >
-  <caption><u>Figure 2</u>: Computation graph on Tensorboard</caption>
+  <img src="images/first_naive_nn.png">
 </p>
 
 Notice here some nodes (e.g. save, evaluation) are removed for clarity.
@@ -107,7 +105,7 @@ Notice here some nodes (e.g. save, evaluation) are removed for clarity.
 
 <p align="center">
   <img src="images/scalars_on_tensor_board.png" >
-  <caption><u>Figure 3</u>: Accuracy and loss of trained model on Tensorboard</caption>
+  <caption>Accuracy and loss of trained model on Tensorboard</caption>
 </p>
 
 
@@ -115,7 +113,7 @@ Notice here some nodes (e.g. save, evaluation) are removed for clarity.
 
 <p align="center">
   <img src="images/training_images_on_tensorboard.png" >
-  <caption><u>Figure 4</u>: Images used in a mini-batch</caption>
+  <caption>Images used in a mini-batch</caption>
 </p>
 
 
