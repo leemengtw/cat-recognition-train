@@ -95,11 +95,18 @@ And you should be able to see all the interesting things on `localhost:6006`:
 
 ### Neural Network structure
 
+As shown below, our simple neural network consist of two conv layers, followed by
+one fully-connected layer (fc1) and the output layer (fc2) with single neuron.
+In order to prevent overfitting, there is also a dropout mechnism between conv layer
+and fully-connected layer.
+
 <p align="center">
   <img src="images/first_naive_nn.png">
 </p>
 
-Notice here some nodes (e.g. save, evaluation) are removed for clarity.
+Notice here for the sake of clarity, some nodes (e.g. save, evaluation) are
+removed so that only the training nodes remains. You may see a more complex
+compuation graph on Tensorboard.
 
 ### Model Performance
 
@@ -109,7 +116,7 @@ Notice here some nodes (e.g. save, evaluation) are removed for clarity.
 </p>
 
 
-### Images used for Training
+### Some images used for Training
 
 <p align="center">
   <img src="images/training_images_on_tensorboard.png" >
@@ -184,15 +191,29 @@ And you should be able to see the application on `https://YOUR-APPLICATION-NUM.h
 
 
 ## Trouble Shooting
-- [pyenv build fail](https://github.com/pyenv/pyenv/issues/655): Try install CLI dev tools
+### [pyenv build fail](https://github.com/pyenv/pyenv/issues/655)
+
+Try install CLI dev tools
 ```commandline
 xcode-select --install
 ```
+### Incompatable ruby version when installing Heroku CLI (MAC)
 
+Update ruby using brew and make it the default ruby
+```commandline
+brew install rbenv ruby-build
 
+# Add rbenv to bash so that it loads every time you open a terminal
+echo 'if which rbenv > /dev/null; then eval "$(rbenv init -)"; fi' >> ~/.bash_profile
+source ~/.bash_profile
 
+# Install Ruby
+rbenv install 2.4.2
+rbenv global 2.4.2
+ruby -v
+```
 
-- Dependencies
+## Dependencies
 
 To install all the dependencies listed in [requirements.txt](requirements.txt)
 all at once:
@@ -200,7 +221,3 @@ all at once:
 ```commandline
 pip install -r requirements.txt
 ```
-
-## Contributing
-
-## Licensing
