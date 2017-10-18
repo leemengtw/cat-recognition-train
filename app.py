@@ -91,15 +91,16 @@ def save_user_feedback():
     """Save user feedback of current prediction"""
     label = request.form['label']
 
-    # save user feedback in file
-    with open(IMAGE_INFO_JSON, 'r') as f:
-        image_info = json.load(f)
-        image_info[CUR_FILENAME]['label'] = label
-    with open(IMAGE_INFO_JSON, 'w') as f:
-        json.dump(image_info, f, indent=4)
+    if CUR_FILENAME:
+        # save user feedback in file
+        with open(IMAGE_INFO_JSON, 'r') as f:
+            image_info = json.load(f)
+            image_info[CUR_FILENAME]['label'] = label
+        with open(IMAGE_INFO_JSON, 'w') as f:
+            json.dump(image_info, f, indent=4)
 
-    if SAVE_INFO_ON_AWS:
-        save_image_info_on_s3(image_info)
+        if SAVE_INFO_ON_AWS:
+            save_image_info_on_s3(image_info)
 
     # get information of gallery
     images, cur_accuracy, num_stored_images = get_stat_of_recent_images()
