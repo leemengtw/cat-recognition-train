@@ -105,8 +105,8 @@ def make_prediction():
 
             # keep record of current prediction for later rendering
             # after getting user feedback
-            CUR_PROB, CUR_FILENAME = prob, filename
-
+            CUR_PROB = prob
+            CUR_FILENAME = filename
             # get information of gallery
             images, cur_accuracy, num_stored_images = get_stat_of_recent_images()
 
@@ -130,6 +130,7 @@ def make_prediction():
 @app.route('/feedback', methods=['POST'])
 def save_user_feedback():
     """Save user feedback of current prediction"""
+    global CUR_FILENAME
     global CUR_PROB
     label = request.form['label']
 
@@ -147,9 +148,6 @@ def save_user_feedback():
 
         if SAVE_INFO_ON_AWS:
             save_image_info_on_s3(image_info)
-
-    print('after user_feedback, image_inf0:')
-    print(json.dumps(image_info, indent=2))
 
 
     # get information of gallery
