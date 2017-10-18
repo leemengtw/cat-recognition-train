@@ -32,6 +32,9 @@ def init_image_info():
     """Init settings.IMAGE_INFO_JSON using file stored on S3 for
     warm start.
     """
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+
     if SAVE_INFO_ON_AWS:
         client = boto3.client('s3',
             aws_access_key_id=AWS_ACCESS_KEY_ID,
@@ -54,7 +57,7 @@ def init_image_info():
             for k, v in local_info.items():
                 if k not in image_info:
                     image_info[k] = v
-                elif k in image_info and v != 'unknown':
+                elif k in image_info and v.get('label', '') != 'unknown':
                     image_info[k] = v
 
 
@@ -67,9 +70,6 @@ def init_image_info():
             # just initialize local file and upload later
             pass
 
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
-init_image_info()
 
 @app.route('/', methods=['GET', 'POST'])
 def make_prediction():
@@ -133,6 +133,10 @@ def save_user_feedback():
     global CUR_PROB
     label = request.form['label']
 
+    print('CUR_FILENAME: {}, CUR_PROB: {}'.format(CUR_FILENAME, CUR_PROB))
+
+    init_image_info()
+
     if CUR_FILENAME:
         # save user feedback in file
         with open(IMAGE_INFO_JSON, 'r') as f:
@@ -144,13 +148,17 @@ def save_user_feedback():
         if SAVE_INFO_ON_AWS:
             save_image_info_on_s3(image_info)
 
+    print('after user_feedback, image_inf0:')
+    print(json.dumps(image_info, indent=2))
+
+
     # get information of gallery
     images, cur_accuracy, num_stored_images = get_stat_of_recent_images()
 
 
     return render_template(
             'index.html',
-            prob=float('{:.1f}'.format(CUR_PROB * 100)),
+            prob=float('{:.1f}'.format(CUR_PROB * 100)) if CUR_PROB else 0,
             cur_image_path=uploaded_image_path(CUR_FILENAME),
             images=images,
             num_stored_images=num_stored_images,
@@ -213,6 +221,7 @@ def get_stat_of_recent_images(num_images=300):
     num_stored_images = len(last_modified_files)
 
 
+
     # read in image info
     with open(IMAGE_INFO_JSON, 'r') as f:
         info = json.load(f)
@@ -226,8 +235,11 @@ def get_stat_of_recent_images(num_images=300):
         path, filename = f[0], f[0].replace(folder, '').replace('/', '')
         cur_image_info = info.get(filename, {})
 
-        # ignore images don't have info for now
-        if not cur_image_info: continue
+        print()
+        print('path: {}'.format(path))
+        print('filename: {}'.format(filename))
+        print('cur_image_info: {}'.format(cur_image_info))
+        print()
 
         prob = cur_image_info['prob']
         image = {
