@@ -280,7 +280,8 @@ def save_image_info(filename, prob):
             image_info[filename] = {
                 'prob': float(prob),
                 'y_pred': 1 if prob > 0.5 else 0,
-                'pred': 'cat' if prob > 0.5 else 'dog'
+                'pred': 'cat' if prob > 0.5 else 'dog',
+                'label': 'unknown'
             }
     with open(IMAGE_INFO_JSON, 'w') as f:
         json.dump(image_info, f, indent=4)
