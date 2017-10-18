@@ -266,6 +266,10 @@ def save_image_info(filename, prob):
     prob: float
         the probability of the image being cat
     """
+
+    if not os.path.exists(app.config['UPLOAD_FOLDER']):
+        os.makedirs(app.config['UPLOAD_FOLDER'])
+
     # save prediction info locally
     with open(IMAGE_INFO_JSON, 'r') as f:
         image_info = json.load(f)
