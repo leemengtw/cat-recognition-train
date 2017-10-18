@@ -16,7 +16,6 @@ try:
 except ImportError:
     SAVE_INFO_ON_AWS = False
 
-
 app = Flask(__name__)
 bootstrap = Bootstrap(app)
 
@@ -29,6 +28,45 @@ predictor = Predictor()
 CUR_PROB = None
 CUR_FILENAME = None
 
+def init_image_info():
+    """Init settings.IMAGE_INFO_JSON using file stored on S3 for
+    warm start.
+    """
+    if SAVE_INFO_ON_AWS:
+        client = boto3.client('s3',
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+        )
+
+        try:
+            res = client.get_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=IMAGE_INFO_JSON\
+                .replace(app.config['UPLOAD_FOLDER'], '').replace('/', '')
+            )
+            image_info = json.loads(res['Body'].read().decode('utf-8'))
+
+            # merge local result
+            if os.path.exists(IMAGE_INFO_JSON):
+                with open(IMAGE_INFO_JSON, 'r') as f:
+                    local_info = json.load(f)
+
+            for k, v in local_info.items():
+                if k not in image_info:
+                    image_info[k] = v
+
+            # initialize local image_info with S3 version
+            with open(IMAGE_INFO_JSON, 'w') as f:
+                json.dump(image_info, f, indent=4)
+
+        except:
+            # when there is no IMAGE_INFO_JSON on S3
+            # just initialize local file and upload later
+            pass
+
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+init_image_info()
 
 @app.route('/', methods=['GET', 'POST'])
 def make_prediction():
@@ -159,8 +197,10 @@ def get_stat_of_recent_images(num_images=300):
 
 
     # get list of last modified images
+    # exclude .json file and files start with .
     files = ['/'.join((folder, file)) \
-        for file in os.listdir(folder) if 'json' not in file] # exclude .json file
+        for file in os.listdir(folder) if ('json' not in file) \
+        and not (file.startswith('.')) ]
 
     # list of tuples (file_path, timestamp)
     last_modified_files = [(file, os.path.getmtime(file)) for file in files]
@@ -204,7 +244,7 @@ def get_stat_of_recent_images(num_images=300):
                 correct += 1
 
     try:
-        cur_accuracy = float('{:.1f}'.format(correct / float(total)))
+        cur_accuracy = float('{:.3f}'.format(correct / float(total)))
     except ZeroDivisionError:
         cur_accuracy = 0
 
@@ -268,22 +308,15 @@ def save_image_info(filename, prob):
         the probability of the image being cat
     """
 
-    if not os.path.exists(app.config['UPLOAD_FOLDER']):
-        os.makedirs(app.config['UPLOAD_FOLDER'])
-
     # save prediction info locally
     with open(IMAGE_INFO_JSON, 'r') as f:
         image_info = json.load(f)
-
-        if image_info.get(filename, None):
-            pass
-        else:
-            image_info[filename] = {
-                'prob': float(prob),
-                'y_pred': 1 if prob > 0.5 else 0,
-                'pred': 'cat' if prob > 0.5 else 'dog',
-                'label': 'unknown'
-            }
+        image_info[filename] = {
+            'prob': float(prob),
+            'y_pred': 1 if prob > 0.5 else 0,
+            'pred': 'cat' if prob > 0.5 else 'dog',
+            'label': 'unknown'
+        }
     with open(IMAGE_INFO_JSON, 'w') as f:
         json.dump(image_info, f, indent=4)
 
@@ -308,6 +341,8 @@ def save_image_info_on_s3(image_info):
         Bucket=S3_BUCKET_NAME,
         Key=IMAGE_INFO_JSON\
         .replace(app.config['UPLOAD_FOLDER'], '').replace('/', ''))
+
+
 
 
 
