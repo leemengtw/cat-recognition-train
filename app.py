@@ -239,10 +239,11 @@ def get_stat_of_recent_images(num_images=300):
         print('cur_image_info: {}'.format(cur_image_info))
         print()
 
+        prob = cur_image_info.get('prob', 0)
         image = {
             'path': path,
             'label': cur_image_info.get('label', 'unknown'),
-            'pred': cur_image_info.get('prob', 0),
+            'pred': cur_image_info.get('pred', 'dog'),
             'cat_prob': int(prob * 100),
             'dog_prob': int((1 - prob) * 100),
         }
