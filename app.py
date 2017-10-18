@@ -54,6 +54,9 @@ def init_image_info():
             for k, v in local_info.items():
                 if k not in image_info:
                     image_info[k] = v
+                elif k in image_info and v != 'unknown':
+                    image_info[k] = v
+
 
             # initialize local image_info with S3 version
             with open(IMAGE_INFO_JSON, 'w') as f:
