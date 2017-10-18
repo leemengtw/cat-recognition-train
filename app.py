@@ -127,6 +127,7 @@ def make_prediction():
 @app.route('/feedback', methods=['POST'])
 def save_user_feedback():
     """Save user feedback of current prediction"""
+    global CUR_PROB
     label = request.form['label']
 
     if CUR_FILENAME:
