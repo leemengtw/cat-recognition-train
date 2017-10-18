@@ -1,0 +1,58 @@
+/*button with file type*/
+.btn-file {
+    position: relative;
+    overflow: hidden;
+}
+.btn-file input[type=file] {
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: 100%;
+    min-height: 100%;
+    font-size: 100px;
+    text-align: right;
+    filter: alpha(opacity=0);
+    opacity: 0;
+    outline: none;
+    background: white;
+    cursor: inherit;
+    display: block;
+}
+
+/*gallery on the right side*/
+img.gal {
+  filter: gray; /* IE6-9*/
+  -webkit-box-shadow: 0px 2px 6px 2px rgba(0,0,0,0.75);
+  -moz-box-shadow: 0px 2px 6px 2px rgba(0,0,0,0.75);
+  box-shadow: 0px 2px 6px 2px rgba(0,0,0,0.75);
+  margin-bottom:20px;
+}
+
+img.gal:hover {
+  filter: none; /* IE6-9 */
+
+}
+
+img.uploaded {
+  -webkit-box-shadow: 0px 2px 6px 2px rgba(0,0,0,0.75);
+  -moz-box-shadow: 0px 2px 6px 2px rgba(0,0,0,0.75);
+  box-shadow: 0px 2px 6px 2px rgba(0,0,0,0.75);
+  margin-bottom:20px;
+}
+
+div.gal {
+  max-height: 1100px;
+  overflow-y: auto;
+}
+
+
+/*feedback image*/
+button.label {
+  filter: gray; /* IE6-9 */
+  -webkit-filter: grayscale(1); /* Google Chrome, Safari 6+ & Opera 15+ */
+}
+
+button.label:hover {
+  filter: none; /* IE6-9 */
+  -webkit-filter: grayscale(0); /* Google Chrome, Safari 6+ & Opera 15+ */
+}
