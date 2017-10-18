@@ -165,7 +165,7 @@ def get_stat_of_recent_images(num_images=300):
     last_modified_files = [(file, os.path.getmtime(file)) for file in files]
     last_modified_files = sorted(last_modified_files,
                             key=lambda t: t[1], reverse=True)
-    num_stored_images = len(last_modified_files) - 1
+    num_stored_images = len(last_modified_files)
 
 
     # read in image info
