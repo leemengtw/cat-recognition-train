@@ -1,16 +1,17 @@
 # Cat-recognition-app
-A flask app recognizing cats using Tensorflow.
+A flask app showcasing how to recognize cats using Tensorflow.
 
 This repository contain all the necessary python code required to build a production-ready ML application that able to identify cats in image.
 
-## App on [Heroku](https://damp-anchorage-60936.herokuapp.com/)
+## Demo on [Heroku](https://damp-anchorage-60936.herokuapp.com/)
 
-It may take some time to load the application first time because we have lots of dependencies.
+It may take some time to boot the heroku app because we have lots of dependencies.  
+The application is devided into two parts, left panel for uploading image for recognizing cats / dogs and the right panel act as gallery.
 
 <p align="center">
-  <a href="https://damp-anchorage-60936.herokuapp.com/" target="_blank"><img src="images/cover.png" alt="Cover" width="50%"/></a>
-
+  <a href="https://damp-anchorage-60936.herokuapp.com/" target="_blank"><img src="images/cover.png" alt="Cover" width="60%"/></a>
 </p>
+
 
 ## Background
 Although there are lots of good tutorials telling you how to build a machine learning model,
