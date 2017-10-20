@@ -1,12 +1,15 @@
 import os
-import boto3
+import glob
 import json
+import boto3
 from flask import Flask, flash, request, json,\
         render_template, redirect, url_for, send_from_directory
 from werkzeug.utils import secure_filename
 from flask_bootstrap import Bootstrap
+from settings import UPLOAD_FOLDER, TEST_DIR, \
+        ALLOWED_EXTENSIONS, IMAGE_INFO_JSON, IS_DEBUG
 from predict import Predictor
-from settings import UPLOAD_FOLDER, ALLOWED_EXTENSIONS, IMAGE_INFO_JSON, IS_DEBUG
+from shutil import copyfile
 
 # AWS settings, ignore this part if test locally
 try:
@@ -15,7 +18,6 @@ try:
     SAVE_INFO_ON_AWS = True
 except ImportError:
     SAVE_INFO_ON_AWS = False
-
 
 app = Flask(__name__)
 bootstrap = Bootstrap(app)
@@ -28,6 +30,26 @@ predictor = Predictor()
 # used for rendering after feedback
 CUR_PROB = None
 CUR_FILENAME = None
+
+
+@app.route('/generate-gallery', methods=['GET'])
+def generate_gallery():
+    img_files = glob.glob(os.path.join(TEST_DIR, '*.jpg'))
+    for i, src_path in enumerate(img_files):
+        if i > 1000: break
+        file_name = src_path.split('/')[-1]
+
+        dst_path = os.path.join(app.config['UPLOAD_FOLDER'], file_name)
+
+        if not os.path.exists(dst_path):
+            copyfile(src_path, dst_path)
+            prob = predictor.predict(dst_path)
+            save_image_info(file_name, prob)
+
+    images, cur_accuracy, num_stored_images = get_stat_of_recent_images()
+    return render_template(
+        'index.html', images=images, cur_accuracy=cur_accuracy,
+        num_stored_images=num_stored_images)
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -62,10 +84,9 @@ def make_prediction():
             save_image_info(filename, prob)
 
 
-            # keep record of current prediction for later rendering
-            # after getting user feedback
-            CUR_PROB, CUR_FILENAME = prob, filename
-
+            # keep tracking current image for feedback
+            CUR_PROB = prob
+            CUR_FILENAME = filename
             # get information of gallery
             images, cur_accuracy, num_stored_images = get_stat_of_recent_images()
 
@@ -89,17 +110,24 @@ def make_prediction():
 @app.route('/feedback', methods=['POST'])
 def save_user_feedback():
     """Save user feedback of current prediction"""
+    global CUR_FILENAME
+    global CUR_PROB
     label = request.form['label']
 
-    # save user feedback in file
-    with open(IMAGE_INFO_JSON, 'r') as f:
-        image_info = json.load(f)
-        image_info[CUR_FILENAME]['label'] = label
-    with open(IMAGE_INFO_JSON, 'w') as f:
-        json.dump(image_info, f, indent=4)
+    print('CUR_FILENAME: {}, CUR_PROB: {}'.format(CUR_FILENAME, CUR_PROB))
 
-    if SAVE_INFO_ON_AWS:
-        save_image_info_on_s3(image_info)
+
+    if CUR_FILENAME:
+        # save user feedback in file
+        with open(IMAGE_INFO_JSON, 'r') as f:
+            image_info = json.load(f)
+            image_info[CUR_FILENAME]['label'] = label
+        with open(IMAGE_INFO_JSON, 'w') as f:
+            json.dump(image_info, f, indent=4)
+
+        if SAVE_INFO_ON_AWS:
+            save_image_info_on_s3(image_info)
+
 
     # get information of gallery
     images, cur_accuracy, num_stored_images = get_stat_of_recent_images()
@@ -107,7 +135,7 @@ def save_user_feedback():
 
     return render_template(
             'index.html',
-            prob=float('{:.1f}'.format(CUR_PROB * 100)),
+            prob=float('{:.1f}'.format(CUR_PROB * 100)) if CUR_PROB else 0,
             cur_image_path=uploaded_image_path(CUR_FILENAME),
             images=images,
             num_stored_images=num_stored_images,
@@ -120,6 +148,10 @@ def uploaded_file(filename):
     """generate url for user uploaded file"""
     return send_from_directory(app.config['UPLOAD_FOLDER'],
                                filename)
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
 
 
 def allowed_file(filename):
@@ -156,16 +188,21 @@ def get_stat_of_recent_images(num_images=300):
     """
     folder = app.config['UPLOAD_FOLDER']
 
+    init_image_info()
+
 
     # get list of last modified images
+    # exclude .json file and files start with .
     files = ['/'.join((folder, file)) \
-        for file in os.listdir(folder) if 'json' not in file] # exclude .json file
+        for file in os.listdir(folder) if ('json' not in file) \
+        and not (file.startswith('.')) ]
 
     # list of tuples (file_path, timestamp)
     last_modified_files = [(file, os.path.getmtime(file)) for file in files]
     last_modified_files = sorted(last_modified_files,
                             key=lambda t: t[1], reverse=True)
-    num_stored_images = len(last_modified_files) - 1
+    num_stored_images = len(last_modified_files)
+
 
 
     # read in image info
@@ -181,14 +218,12 @@ def get_stat_of_recent_images(num_images=300):
         path, filename = f[0], f[0].replace(folder, '').replace('/', '')
         cur_image_info = info.get(filename, {})
 
-        # ignore images don't have info for now
-        if not cur_image_info: continue
 
-        prob = cur_image_info['prob']
+        prob = cur_image_info.get('prob', 0)
         image = {
             'path': path,
             'label': cur_image_info.get('label', 'unknown'),
-            'pred': cur_image_info['pred'],
+            'pred': cur_image_info.get('pred', 'dog'),
             'cat_prob': int(prob * 100),
             'dog_prob': int((1 - prob) * 100),
         }
@@ -203,7 +238,7 @@ def get_stat_of_recent_images(num_images=300):
                 correct += 1
 
     try:
-        cur_accuracy = float('{:.1f}'.format(correct / float(total)))
+        cur_accuracy = float('{:.3f}'.format(correct / float(total)))
     except ZeroDivisionError:
         cur_accuracy = 0
 
@@ -266,18 +301,16 @@ def save_image_info(filename, prob):
     prob: float
         the probability of the image being cat
     """
+
     # save prediction info locally
     with open(IMAGE_INFO_JSON, 'r') as f:
         image_info = json.load(f)
-
-        if image_info.get(filename, None):
-            pass
-        else:
-            image_info[filename] = {
-                'prob': float(prob),
-                'y_pred': 1 if prob > 0.5 else 0,
-                'pred': 'cat' if prob > 0.5 else 'dog'
-            }
+        image_info[filename] = {
+            'prob': float(prob),
+            'y_pred': 1 if prob > 0.5 else 0,
+            'pred': 'cat' if prob > 0.5 else 'dog',
+            'label': 'unknown'
+        }
     with open(IMAGE_INFO_JSON, 'w') as f:
         json.dump(image_info, f, indent=4)
 
@@ -303,11 +336,47 @@ def save_image_info_on_s3(image_info):
         Key=IMAGE_INFO_JSON\
         .replace(app.config['UPLOAD_FOLDER'], '').replace('/', ''))
 
+def init_image_info():
+    """Init settings.IMAGE_INFO_JSON using file stored on S3 for
+    warm start.
+    """
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+
+    if SAVE_INFO_ON_AWS:
+        client = boto3.client('s3',
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+        )
+
+        try:
+            res = client.get_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=IMAGE_INFO_JSON\
+                .replace(app.config['UPLOAD_FOLDER'], '').replace('/', '')
+            )
+            image_info = json.loads(res['Body'].read().decode('utf-8'))
+
+            # merge local result
+            if os.path.exists(IMAGE_INFO_JSON):
+                with open(IMAGE_INFO_JSON, 'r') as f:
+                    local_info = json.load(f)
+
+            for k, v in local_info.items():
+                if k not in image_info:
+                    image_info[k] = v
+                elif k in image_info and v.get('label', '') != 'unknown':
+                    image_info[k] = v
 
 
-@app.errorhandler(404)
-def page_not_found(e):
-    return render_template('404.html'), 404
+            # initialize local image_info with S3 version
+            with open(IMAGE_INFO_JSON, 'w') as f:
+                json.dump(image_info, f, indent=4)
+
+        except:
+            # when there is no IMAGE_INFO_JSON on S3
+            # just initialize local file and upload later
+            pass
 
 
 if __name__ == '__main__':
