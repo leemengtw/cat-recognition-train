@@ -54,38 +54,38 @@
 
 
         <!-- user feedback button -->
-        {% if show_feedback is defined and show_feedback %}
-          <div class="row">
-            <div class="col-md-12 text-center">
-              <h4>Is that correct?</h4>
-              <p>Teach our AI baby and make it smarter. It's a image about ..</p>
-              <form action="{{ url_for('save_user_feedback') }}" method=post>
-                <div class='form-group'>
-                  <button type="submit" name='label' value="cat" class="btn btn-success btn-lg col-md-2 col-md-offset-1">Cat <img src="static/images/cat.png"  height="21" width="21"></button>
-                  <button type="submit" name='label' value="dog" class="btn btn-info btn-lg col-md-2 col-md-offset-1">Dog <img src="static/images/dog1.png" height="21" width="21"></button>
-                  <button type="submit" name='label' value="others" class="btn btn-danger btn-lg col-md-2 col-md-offset-1">Others</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        {% endif %}
+        <!--{% if show_feedback is defined and show_feedback %}-->
+          <!--<div class="row">-->
+            <!--<div class="col-md-12 text-center">-->
+              <!--<h4>Is that correct?</h4>-->
+              <!--<p>Teach our AI baby and make it smarter. It's a image about ..</p>-->
+              <!--<form action="{{ url_for('save_user_feedback') }}" method=post>-->
+                <!--<div class='form-group'>-->
+                  <!--<button type="submit" name='label' value="cat" class="btn btn-success btn-lg col-md-2 col-md-offset-1">Cat <img src="static/images/cat.png"  height="21" width="21"></button>-->
+                  <!--<button type="submit" name='label' value="dog" class="btn btn-info btn-lg col-md-2 col-md-offset-1">Dog <img src="static/images/dog1.png" height="21" width="21"></button>-->
+                  <!--<button type="submit" name='label' value="others" class="btn btn-danger btn-lg col-md-2 col-md-offset-1">Others</button>-->
+                <!--</div>-->
+              <!--</form>-->
+            <!--</div>-->
+          <!--</div>-->
+        <!--{% endif %}-->
 
-        <!-- thank you message -->
-        {% if show_thankyou is defined and show_thankyou %}
-          <div class="row">
-            <div class="col-md-12 text-center">
-              <h4>Thank you! Try another image? :D</h4>
-            </div>
-          </div>
-        {% endif %}
+        <!--&lt;!&ndash; thank you message &ndash;&gt;-->
+        <!--{% if show_thankyou is defined and show_thankyou %}-->
+          <!--<div class="row">-->
+            <!--<div class="col-md-12 text-center">-->
+              <!--<h4>Thank you! Try another image? :D</h4>-->
+            <!--</div>-->
+          <!--</div>-->
+        <!--{% endif %}-->
 
     </div>
   </div>
   <!-- gallery part -->
   <div id="right_panel" class="col-md-6 text-center">
       <h3>Recent images <span>({{images|length}} / {{num_stored_images}})</span></h3>
-      <h4>{{cur_accuracy * 100}}% predictions are correct! :3</h4>
-      <h5>(Based on your feedback)</h5>
+      <!--<h4>{{cur_accuracy * 100}}% predictions are correct! :3</h4>-->
+      <!--<h5>(Based on your feedback)</h5>-->
       <div class="row gal">
         {% for image in images %}
           <div class="col-md-4 col-sm-6 col-xs-6" style="margin-top: 10px;">
