@@ -30,6 +30,48 @@ predictor = Predictor()
 CUR_PROB = None
 CUR_FILENAME = None
 
+def init_image_info():
+    """Init settings.IMAGE_INFO_JSON using file stored on S3 for
+    warm start.
+    """
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+
+    if SAVE_INFO_ON_AWS:
+        client = boto3.client('s3',
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+        )
+
+        try:
+            res = client.get_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=IMAGE_INFO_JSON\
+                .replace(app.config['UPLOAD_FOLDER'], '').replace('/', '')
+            )
+            image_info = json.loads(res['Body'].read().decode('utf-8'))
+
+            # merge local result
+            if os.path.exists(IMAGE_INFO_JSON):
+                with open(IMAGE_INFO_JSON, 'r') as f:
+                    local_info = json.load(f)
+
+            for k, v in local_info.items():
+                if k not in image_info:
+                    image_info[k] = v
+                elif k in image_info and v.get('label', '') != 'unknown':
+                    image_info[k] = v
+
+
+            # initialize local image_info with S3 version
+            with open(IMAGE_INFO_JSON, 'w') as f:
+                json.dump(image_info, f, indent=4)
+
+        except:
+            # when there is no IMAGE_INFO_JSON on S3
+            # just initialize local file and upload later
+            pass
+
 
 @app.route('/generate-gallery', methods=['GET'])
 def generate_gallery():
@@ -83,7 +125,8 @@ def make_prediction():
             save_image_info(filename, prob)
 
 
-            # keep tracking current image for feedback
+            # keep record of current prediction for later rendering
+            # after getting user feedback
             CUR_PROB = prob
             CUR_FILENAME = filename
             # get information of gallery
@@ -115,6 +158,7 @@ def save_user_feedback():
 
     print('CUR_FILENAME: {}, CUR_PROB: {}'.format(CUR_FILENAME, CUR_PROB))
 
+    init_image_info()
 
     if CUR_FILENAME:
         # save user feedback in file
@@ -216,7 +260,6 @@ def get_stat_of_recent_images(num_images=300):
 
         path, filename = f[0], f[0].replace(folder, '').replace('/', '')
         cur_image_info = info.get(filename, {})
-
 
         prob = cur_image_info.get('prob', 0)
         image = {
@@ -335,6 +378,7 @@ def save_image_info_on_s3(image_info):
         Key=IMAGE_INFO_JSON\
         .replace(app.config['UPLOAD_FOLDER'], '').replace('/', ''))
 
+
 def init_image_info():
     """Init settings.IMAGE_INFO_JSON using file stored on S3 for
     warm start.
@@ -342,40 +386,11 @@ def init_image_info():
     if not os.path.exists(UPLOAD_FOLDER):
         os.makedirs(UPLOAD_FOLDER)
 
-    if SAVE_INFO_ON_AWS:
-        client = boto3.client('s3',
-            aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_ACCESS_KEY
-        )
 
-        try:
-            res = client.get_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=IMAGE_INFO_JSON\
-                .replace(app.config['UPLOAD_FOLDER'], '').replace('/', '')
-            )
-            image_info = json.loads(res['Body'].read().decode('utf-8'))
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
 
-            # merge local result
-            if os.path.exists(IMAGE_INFO_JSON):
-                with open(IMAGE_INFO_JSON, 'r') as f:
-                    local_info = json.load(f)
-
-            for k, v in local_info.items():
-                if k not in image_info:
-                    image_info[k] = v
-                elif k in image_info and v.get('label', '') != 'unknown':
-                    image_info[k] = v
-
-
-            # initialize local image_info with S3 version
-            with open(IMAGE_INFO_JSON, 'w') as f:
-                json.dump(image_info, f, indent=4)
-
-        except:
-            # when there is no IMAGE_INFO_JSON on S3
-            # just initialize local file and upload later
-            pass
 
 
 if __name__ == '__main__':
