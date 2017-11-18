@@ -27,8 +27,8 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 predictor = Predictor()
 
 # used for rendering after feedback
-CUR_PROB = None
-CUR_FILENAME = None
+CURRENT_IMAGE_INFO = os.path.join(UPLOAD_FOLDER, 'current_image_info.json')
+
 
 def init_image_info():
     """Init settings.IMAGE_INFO_JSON using file stored on S3 for
@@ -97,8 +97,6 @@ def generate_gallery():
 def make_prediction():
     """View that receive images and render predictions
     """
-    global CUR_PROB
-    global CUR_FILENAME
 
     if request.method == 'POST':
         # check if the post request has the file part
@@ -120,6 +118,7 @@ def make_prediction():
 
             # get prediction
             prob = predictor.predict(file_path)
+            prob = float(prob) # turn ndarray to float
 
             # save image info
             save_image_info(filename, prob)
@@ -127,8 +126,11 @@ def make_prediction():
 
             # keep record of current prediction for later rendering
             # after getting user feedback
-            CUR_PROB = prob
-            CUR_FILENAME = filename
+            info = {'prob': prob, 'file_name': filename}
+            with open(CURRENT_IMAGE_INFO, 'w') as f:
+                json.dump(info, f, indent=4)
+
+
             # get information of gallery
             images, cur_accuracy, num_stored_images = get_stat_of_recent_images()
 
@@ -152,19 +154,25 @@ def make_prediction():
 @app.route('/feedback', methods=['POST'])
 def save_user_feedback():
     """Save user feedback of current prediction"""
-    global CUR_FILENAME
-    global CUR_PROB
+
+    # get most recently prediction result
+    if os.path.exists(CURRENT_IMAGE_INFO):
+        with open(CURRENT_IMAGE_INFO, 'r') as f:
+            info = json.load(f)
+            filename = info['file_name']
+            prob = info['prob']
+
     label = request.form['label']
 
-    print('CUR_FILENAME: {}, CUR_PROB: {}'.format(CUR_FILENAME, CUR_PROB))
+    print('filename: {}, prob: {}'.format(filename, prob))
 
     init_image_info()
 
-    if CUR_FILENAME:
+    if filename:
         # save user feedback in file
         with open(IMAGE_INFO_JSON, 'r') as f:
             image_info = json.load(f)
-            image_info[CUR_FILENAME]['label'] = label
+            image_info[filename]['label'] = label
         with open(IMAGE_INFO_JSON, 'w') as f:
             json.dump(image_info, f, indent=4)
 
@@ -178,8 +186,8 @@ def save_user_feedback():
 
     return render_template(
             'index.html',
-            prob=float('{:.1f}'.format(CUR_PROB * 100)) if CUR_PROB else 0,
-            cur_image_path=uploaded_image_path(CUR_FILENAME),
+            prob=float('{:.1f}'.format(prob * 100)) if prob else 0,
+            cur_image_path=uploaded_image_path(filename),
             images=images,
             num_stored_images=num_stored_images,
             cur_accuracy=cur_accuracy,
