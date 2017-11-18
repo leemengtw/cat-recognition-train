@@ -222,3 +222,10 @@ all at once:
 ```commandline
 pip install -r requirements.txt
 ```
+
+## Google App Engine
+
+Test application in the current folder
+```commandline
+dev_appserver.py $PWD
+```
