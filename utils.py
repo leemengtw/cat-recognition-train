@@ -3,7 +3,9 @@ import glob
 import pickle
 import numpy as np
 import tensorflow as tf
-from scipy.misc import imread, imresize
+from imageio import imread
+from skimage.transform import resize
+
 from PIL import Image
 
 
@@ -28,7 +30,8 @@ def read_image_and_resize(file_path, size=(128, 128), debug=False):
     if img.shape[2] == 4:
         img = imread(get_rgb_image(file_path))
 
-    img_resized = imresize(img, size)
+    # img_resized = imresize(img, size)
+    img_resized = resize(img, size)
     if debug:
         import matplotlib.pyplot as plt
         print('Image resized from {} to {}'

@@ -1,7 +1,6 @@
 import os
 import glob
 import json
-import boto3
 from flask import Flask, flash, request, json,\
         render_template, redirect, url_for, send_from_directory
 from werkzeug.utils import secure_filename
