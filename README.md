@@ -191,6 +191,25 @@ git push heroku master
 And you should be able to see the application on `https://YOUR-APPLICATION-NUM.herokuapp.com/`.
 
 
+## Run app on Docker
+
+Enable access to application running on docker @ `localhost:1234`
+```commandline
+docker run -dp 1234:5000 leemeng/cat
+```
+
+Check whether the application is running
+```commandline
+docker ps
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS                    NAMES
+a887934e1849        leemeng/cat         "python3 app.py"    3 minutes ago       Up 3 minutes        0.0.0.0:1234->5000/tcp   thirsty_carson
+```
+
+Stop the application
+```commandline
+docker stop a887934e1849
+```
+
 ## Trouble Shooting
 ### [pyenv build fail](https://github.com/pyenv/pyenv/issues/655)
 
@@ -221,11 +240,4 @@ all at once:
 
 ```commandline
 pip install -r requirements.txt
-```
-
-## Google App Engine
-
-Test application in the current folder
-```commandline
-dev_appserver.py $PWD
 ```
