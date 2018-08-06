@@ -192,6 +192,10 @@ And you should be able to see the application on `https://YOUR-APPLICATION-NUM.h
 
 
 ## Run app on Docker
+Get the image on the Dockerhub
+```commandline
+docker pull leemeng/cat
+```
 
 Enable access to application running on docker @ `localhost:1234`
 ```commandline
