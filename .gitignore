@@ -2,6 +2,8 @@
 
 # dataset
 datasets/
+test_dataset/
+dataset_example_img_path/
 
 # AWS Settings
 aws_settings.py
@@ -112,3 +114,7 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# vim
+*.swp
+*~
