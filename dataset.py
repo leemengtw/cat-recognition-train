@@ -1,7 +1,8 @@
 import os
 from math import ceil
 from glob import glob
-from psutil import virtual_memory
+import random
+import logging
 from tqdm import tqdm
 from imageio import imread
 import tensorflow as tf
@@ -12,102 +13,171 @@ class Dataset():
     def __init__(
             self,
             train=True,
-            preload=True,
             size=(128, 128),
-            batch_size=8,
+            batch_size=64,
             shuffle_buffer=None,
-            epochs=2):
-        if virtual_memory().total < 16 * 2**30 and preload:
-            print("Not enough memory; Not preloading images into main memory.")
-            preload = False
-        self.augs = [
-            (tf.image.random_hue, (.1,)),
-            (tf.image.random_saturation, (.8, 1.2)),
-            (tf.image.random_contrast, (.3, 1.)),
-            (self._random_resize, None)]
+            epochs=2,
+            val=False,
+            valratio=0.1,
+            preload=True,
+            random_seed=0):
+        random.seed(random_seed)
         self.train = train
-        self.preload = preload
         self.size = size
+        self.val = val
         self.root = os.path.join("datasets", "train" if train else "test1")
-        paths = sorted(glob(os.path.join(self.root, "*.jpg")))[:35]
-        self.length = len(paths)
-        self.total_batches = ceil(self.length * epochs / batch_size)
-        self.batch_per_epoch = ceil(self.total_batches / epochs)
-        if preload:
-            print("Loading images")
-            self.imgs = [imread(p) for p in tqdm(paths)]
-            dataset = tf.data.Dataset.from_generator(
-                lambda: self.imgs, tf.int32, output_shapes=[None, None, 3])
-        else:
-            self.imgs = tf.constant(paths)
-            dataset = tf.data.Dataset.from_tensor_slices(self.imgs)
+        paths = sorted(glob(os.path.join(self.root, "*.jpg")))[:160]
         if self.train:
-            labels = [0 if "dog" in p else 1 for p in paths]
-            labels = tf.data.Dataset.from_tensor_slices(tf.constant(labels))
-            dataset = tf.data.Dataset.zip((dataset, labels))
-            dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(
-                shuffle_buffer if shuffle_buffer else len(paths),
-                epochs))
-        self.dataset = dataset.map(self._process).batch(batch_size)
-        self.iterator = self.dataset.make_one_shot_iterator()
-        self.get_batch_op = self.iterator.get_next()
 
-    @staticmethod
-    def _random_resize(img):
-        out_size = tf.random_uniform(shape=[2], minval=.8, maxval=1.)
-        out_size = tf.cast(out_size * tf.cast(tf.shape(img)[:2], tf.float32), tf.int32)
-        return tf.image.random_crop(img, [out_size[0], out_size[1], 3])
+            cat_cnt = sum("cat" in p for p in paths)
+            dog_cnt = len(paths) - cat_cnt
+            cat_vsize = int(cat_cnt * valratio)
+            dog_vsize = int(dog_cnt * valratio)
+            cat_paths = [p for p in paths if "cat" in p]
+            dog_paths = [p for p in paths if "dog" in p]
+            random.shuffle(cat_paths)
+            random.shuffle(dog_paths)
+            train_paths = cat_paths[:-cat_vsize] + dog_paths[:-dog_vsize]
+            val_paths = sorted(cat_paths[-cat_vsize:] + dog_paths[-dog_vsize:])
 
-    def _aug(self, img):
-        aug_prob = tf.random_uniform(shape=[4], minval=.0, maxval=1.)
-        img = tf.image.random_flip_left_right(img)
-        for i, (func, args) in enumerate(self.augs):
-            img = tf.cond(
-                tf.math.greater(aug_prob[i], .5),
-                (lambda: func(img, *args)) if args else (lambda: func(img)),
-                lambda: img)
-        return img
+            # FIXME
+            # map after shuffle?
+            def to_dataset(cur_paths, is_train=True):
+                cur_labels = [0 if "dog" in p else 1 for p in cur_paths]
+                cur_labels = tf.data.Dataset.from_tensor_slices(tf.constant(cur_labels))
+                if preload:
+                    logging.info("Preloading images...")
+                    cur_imgs = [imread(p) for p in tqdm(cur_paths)]
+                    cur_imgs = tf.data.Dataset.from_generator(
+                        lambda: cur_imgs, tf.int32, output_shapes=[None, None, 3])
+                else:
+                    cur_imgs = tf.data.Dataset.from_tensor_slices(tf.constant(cur_paths))
+                dataset = tf.data.Dataset.zip((cur_imgs, cur_labels))
+                if is_train:
+                    dataset = dataset.apply(
+                        tf.data.experimental.shuffle_and_repeat(
+                            shuffle_buffer if shuffle_buffer else self.train_length,
+                            epochs))
 
-    def _process(self, img, label=None):
-        if not self.preload:
-            img = tf.image.decode_jpeg(tf.read_file(img))
-        if self.train:
-            img = self._aug(img)
-            return tf.image.resize_images(img, self.size), label
+                    def _random_resize(img):
+                        out_size = tf.random_uniform(shape=[2], minval=.8, maxval=1.)
+                        out_size = tf.cast(
+                                out_size * tf.cast(tf.shape(img)[:2], tf.float32), tf.int32)
+                        return tf.image.random_crop(img, [out_size[0], out_size[1], 3])
+
+                    augs = [
+                        (tf.image.random_hue, (.1,)),
+                        (tf.image.random_saturation, (.8, 1.2)),
+                        (tf.image.random_contrast, (.3, 1.)),
+                        (_random_resize, None)]
+
+                def _process(img, label):
+                    if not preload:
+                        img = tf.image.decode_jpeg(tf.read_file(img))
+                    if is_train:
+                        aug_prob = tf.random_uniform(shape=[4], minval=0., maxval=1.)
+                        img = tf.image.random_flip_left_right(img)
+                        for i, (func, args) in enumerate(augs):
+                            img = tf.cond(
+                                tf.math.greater(aug_prob[i], .5),
+                                (lambda: func(img, *args)) if args else (lambda: func(img)),
+                                lambda: img)
+                    return tf.image.resize_images(img, self.size), label
+
+                return dataset.map(_process)
+
+            self.train_length = len(train_paths)
+            self.val_length = len(val_paths)
+            self.val_dataset = to_dataset(val_paths, False).batch(batch_size)
+            self.train_dataset = to_dataset(train_paths, True).batch(batch_size)
+            self.dataset = self.val_dataset if val else self.train_dataset
+            self.train_total_batches = ceil(self.train_length * epochs / batch_size)
+            self.val_total_batches = ceil(self.val_length / batch_size)
+            self.train_batch_per_epoch = ceil(self.train_total_batches / epochs)
+            self.val_batch_per_epoch = self.val_total_batches
+            self.train_iterator = self.train_dataset.make_one_shot_iterator()
+            self.val_iterator = self.val_dataset.make_initializable_iterator()
+            # self.total_batches = self.val_total_batches if val else self.train_total_batches
+            # self.batch_per_epoch = self.val_batch_per_epoch if val else self.train_batch_per_epoch
+            # self.length = self.val_length if val else self.train_length
+            # self.iterator = self.val_iterator if val else
         else:
-            return tf.image.resize_images(img, self.size)
+            self.length = len(paths)
+            self.total_batches = ceil(self.length / batch_size)
+            self.batch_per_epoch = self.total_batches
+            if preload:
+                logging.info("Preloading images...")
+                dataset = [imread(p) for p in tqdm(paths)]
+                dataset = tf.data.Dataset.from_generator(
+                    lambda: dataset, tf.int32, output_shapes=[None, None, 3])
+                self.dataset = dataset.map(
+                    lambda img: tf.image.resize_images(img, self.size)).batch(batch_size)
+            else:
+                paths = tf.constant(paths)
+                dataset = tf.data.Dataset.from_tensor_slices(paths)
+                self.dataset = dataset.map(
+                    lambda img: tf.image.resize_images(
+                        tf.image.decode_jpeg(tf.read_file(img)), self.size)).batch(batch_size)
+            self.iterator = self.dataset.make_initializable_iterator()
+        # self.get_batch_op = self.iterator.get_next()
 
     def get_batch(self):
-        return self.get_batch_op
+        if self.train:
+            return self.val_iterator.get_next() if self.val else self.train_iterator.get_next()
+        else:
+            return self.iterator.get_next()
 
-    def reinitialize(self):
-        self.iterator = self.dataset.make_one_shot_iterator()
+    def initialize(self, sess):
+        sess.run(self.val_iterator.initializer if self.train else self.iterator.initializer)
 
     def get_total_batches(self):
-        return self.total_batches
+        if self.train:
+            return self.val_total_batches if self.val else self.train_total_batches
+        else:
+            return self.total_batches
 
     def get_batch_per_epoch(self):
-        return self.batch_per_epoch
+        if self.train:
+            return self.val_batch_per_epoch if self.val else self.train_batch_per_epoch
+        else:
+            return self.batch_per_epoch
+
+    def eval(self):
+        if not self.train:
+            logging.warning("Dataset.eval takes no effect in test mode")
+        self.val = True
+
+    def train(self):
+        if not self.train:
+            logging.warning("Dataset.train takes no effect in test mode")
+        self.val = False
 
 
 def _test():
     epochs = 2
-    d = Dataset(epochs=epochs)
+    is_train = False
+    d = Dataset(epochs=epochs, train=is_train)
     sess = tf.Session()
+    if not is_train:
+        d.initialize(sess)
     next_item = d.get_batch()
     i = 0
     b_per_epoch = d.get_batch_per_epoch()
-    print(d.get_total_batches(), d.get_batch_per_epoch())
+    print(b_per_epoch, d.get_total_batches(), d.get_batch_per_epoch())
+    import time
+    t = time.time()
     for i in range(d.get_total_batches()):
         _ = sess.run(next_item)
-        print(i // b_per_epoch + 1, i % b_per_epoch + 1)
+        print(i // b_per_epoch + 1, i % b_per_epoch + 1, end='\033[K\r')
+        # print(label)
     try:
         while True:
             _, _ = sess.run(next_item)
-            print("WHAT")  # unexpected behavior
+            assert False, \
+                "Code here should not be runned; dataset not gone through"
     except tf.errors.OutOfRangeError:
-        print("YAY")
-        d.reinitialize()
+        print("YAY\033[K")
+    print("\n%f sec elapsed." % (time.time() - t))
 
 
 if __name__ == "__main__":
