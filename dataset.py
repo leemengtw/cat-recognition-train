@@ -11,7 +11,7 @@ class Dataset():
     def __init__(
             self,
             train=True,
-            size=(128, 128),
+            size=(224, 224),
             batch_size=64,
             shuffle_buffer=None,
             epochs=1,
