@@ -1,3 +1,4 @@
+import os
 import tensorflow as tf
 
 
@@ -67,6 +68,8 @@ def conv(
             None if init_weight is not None else [k_size, k_size, in_chs, out_chs],
             tf.float32,
             init_weight if init_weight is not None else tf.contrib.layers.xavier_initializer())
+        # "SAME" pad in tf.nn.conv2d does not do the same as pytorch
+        # would do when k_size=3, stride=2, pad=1
         if pad > 0:
             x = tf.pad(x, [[0, 0], [pad, pad], [pad, pad], [0, 0]])
         x = tf.nn.conv2d(x, weight, [1, stride, stride, 1], "VALID")
@@ -187,6 +190,8 @@ class Net():
         self.output_neuron = cls if cls > 2 else 1
         self.x = x  # placeholder or data from tf.data.Dataset
         self.inference_only = inference_only
+        self.saver = None
+        self.saved_graph = False
         # inference_only: so there's no need to feed is_training placholder on frozen graph
         #                 and hope graph optimization tool will fuse the constants.
         # if inference_only, self.is_training will never be used
@@ -194,6 +199,8 @@ class Net():
         self.input_size = (None, *input_size, 3)
         self.first_chs = 24
         self.last_chs = 2048 if alpha == 2. else 1024
+        self.graph_name_prefix = "net_graph"
+        # After stage2, channels are doubled for each stage; no need to store all channels
         if alpha == 0.5:
             self.first_block_chs = 48
         elif alpha == 1.:
@@ -207,7 +214,11 @@ class Net():
             logging.error("Unexpected alpha, which should be 0.5, 1.0, 1.5, or 2.0")
             raise ValueError
         self.repeats = (3, 7, 3)
-        self.out = self.build_net(init_params)
+        with tf.variable_scope(self.graph_name_prefix):
+            self.out = self.build_net(init_params)
+        self.to_save_vars = [
+            v for v in tf.global_variables() if v.name.startswith(self.graph_name_prefix)]
+        self.saver = tf.train.Saver(self.to_save_vars)
 
     def build_net(self, params):
         res = self.x
@@ -218,10 +229,8 @@ class Net():
             *params[1:5] if params is not None else [None])
         res = tf.pad(tf.nn.relu(res), [[0, 0], [1, 1], [1, 1], [0, 0]])
         res = tf.nn.max_pool(res, [1, 3, 3, 1], [1, 2, 2, 1], "VALID")
-        m_cnt = 2
-        p_cnt = 5
-        in_chs = self.first_chs
-        out_chs = self.first_block_chs
+        m_cnt, p_cnt = 2, 5
+        in_chs, out_chs = self.first_chs, self.first_block_chs
         for repeat in self.repeats:
             res = shufflenet_unit(
                 res, in_chs, self.is_training, m_cnt, self.inference_only, out_chs,
@@ -240,31 +249,37 @@ class Net():
         res = conv(
             res, in_chs, self.last_chs, 1, 1, m_cnt, False, 0,
             params[p_cnt] if params is not None else None)  # No bias
-        m_cnt += 1
-        p_cnt += 1
         res = tf.nn.relu(batch_norm(
-            res, self.last_chs, self.is_training, m_cnt, self.inference_only, 1e-5, .9,
-            *params[p_cnt:p_cnt+4] if params is not None else [None]))
-        m_cnt += 1
+            res, self.last_chs, self.is_training, m_cnt + 1, self.inference_only, 1e-5, .9,
+            *params[p_cnt+1:p_cnt+5] if params is not None else [None]))
         if not self.test_convert:
             res = tf.reshape(global_avg_pooling(res), [-1, self.last_chs])
             # not loading from params
-            res = fully_connected(res, self.last_chs, self.output_neuron, m_cnt)
+            res = fully_connected(res, self.last_chs, self.output_neuron, m_cnt + 2)
             if self.output_neuron == 1:  # used on binary classification
                 res = tf.reshape(res, [-1])
         return res
 
-    def save(self, path):
-        pass
+    def save(self, sess, directory, fname):
+        if not os.path.isdir(directory):
+            os.makedirs(directory)
+        if not self.saved_graph:
+            tf.train.write_graph(
+                sess.graph.as_graph_def(), directory, "%s.pbtxt" % fname, as_text=True)
+            self.saved_graph = True
+        self.saver.save(sess, os.path.join(directory, fname))
 
-    def load(self, path):
-        pass
+    def load(self, sess, directory, fname=None):
+        if fname is not None:
+            self.saver.restore(sess, os.path.join(directory, fname))
+        else:
+            self.saver.restore(sess, tf.train.latest_checkpoint(directory))
 
-    def load_from_numpy(self, path):
+    def load_from_numpy(self, sess, path):
         pass
 
     def __call__(self, x):
-        pass
+        return self.out
 
 
 def convert_pytorch_weight():
@@ -273,8 +288,8 @@ def convert_pytorch_weight():
 
     def p_load(net, sd):
         cnt = 0
-        net_keys = list(net.state_dict().keys())
-        net_keys = [k for k in net_keys if not k.endswith("num_batches_tracked")]
+        net_keys = [
+            k for k in list(net.state_dict().keys()) if not k.endswith("num_batches_tracked")]
         for from_key, to_key in zip(sd.keys(), net_keys):
             net.state_dict()[to_key].copy_(sd[from_key])
             cnt += 1
@@ -330,21 +345,37 @@ def convert_pytorch_weight():
 
 
 def _test():
+    # Check if inference_only mode works
     import numpy as np
     import logging
+    original_lvl = logging.getLogger().getEffectiveLevel()
+    logging.basicConfig(level=logging.INFO)
     shape = [2, 224, 224, 3]
-    inference_only = False
+    directory = "ckpts"
     a = tf.placeholder(tf.float32, shape=[None, *shape[1:]])
-    net = Net(a, inference_only=inference_only)
+    nx = (np.random.rand(*shape) * 10 - 5).astype(np.float32)
+    net = Net(a, inference_only=False)
     ab = net.out
     with tf.Session() as sess:
+        writer = tf.summary.FileWriter("runs", sess.graph)
         sess.run(tf.global_variables_initializer())
-        if inference_only:
-            z = sess.run(ab, feed_dict={a: np.random.rand(*shape)})
-        else:
-            z = sess.run(ab, feed_dict={a: np.random.rand(*shape), net.is_training: True})
+        z = sess.run(ab, feed_dict={a: nx, net.is_training: False})
         logging.info(z.shape)
+        net.save(sess, directory, "0")
+        writer.close()
+    del net
+    tf.reset_default_graph()
+    a = tf.placeholder(tf.float32, shape=[None, *shape[1:]])
+    net = Net(a, inference_only=True)
+    ab = net.out
+    with tf.Session() as sess:
+        net.load(sess, directory)
+        zz = sess.run(ab, feed_dict={a: nx})
+    logging.info(
+        "Output diff between original params and loaded params: %f" % np.sqrt(np.mean((z-zz)**2)))
+    logging.basicConfig(level=original_lvl)
 
 
 if __name__ == '__main__':
-    convert_pytorch_weight()
+    # convert_pytorch_weight()
+    _test()

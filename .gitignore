@@ -118,3 +118,9 @@ venv.bak/
 # vim
 *.swp
 *~
+
+# tensorboard logdir
+runs/
+
+# tensorflow checkpoints
+ckpts/
