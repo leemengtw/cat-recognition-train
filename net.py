@@ -1,6 +1,21 @@
 import tensorflow as tf
 
 
+def fully_connected(x, in_n, out_n, module_cnt, init_weight=None, init_bias=None):
+    with tf.variable_scope("fc_%02d" % module_cnt):
+        weight = tf.get_variable(
+            "weight", [in_n, out_n], tf.float32,
+            init_weight if init_weight else tf.contrib.layers.xavier_initializer())
+        bias = tf.get_variable(
+            "bias", [out_n], tf.float32,
+            init_bias if init_bias else tf.zeros_initializer())
+        return tf.nn.xw_plus_b(x, weight, bias)
+
+
+def global_avg_pooling(x, keepdims=True):
+    return tf.reduce_mean(x, [1, 2], keepdims=keepdims)
+
+
 # chs in argument: avoid redundant variables in tf graph
 #                  should do more in graph building phase; produces less garbage
 # using pytorch batch_norm defaults
@@ -94,7 +109,7 @@ def shufflenet_unit(
                 init_params[0] if init_params else None)
             x1 = batch_norm(
                 x1, in_c, is_training, 1, inference_only, 1e-5, .9,
-                *init_params[1:5] if init_params else None)
+                *init_params[1:5] if init_params else [None])
             x1 = conv(
                 x1, in_c, chs, 1, 1, 2, False, "SAME",
                 init_params[5] if init_params else None)
@@ -113,13 +128,13 @@ def shufflenet_unit(
                 init_params[15] if init_params else None)
             x2 = batch_norm(
                 x2, chs, is_training, 7, inference_only, 1e-5, .9,
-                *init_params[16:20] if init_params else None)
+                *init_params[16:20] if init_params else [None])
             x2 = conv(
                 x2, chs, chs, 1, 1, 8, False, "SAME",
                 init_params[20] if init_params else None)
             x2 = batch_norm(
                 x2, chs, is_training, 9, inference_only, 1e-5, .9,
-                *init_params[21:25] if init_params else None)
+                *init_params[21:25] if init_params else [None])
             x = tf.nn.relu(tf.concat([x1, x2], 3))
         else:
             assert in_c % 2 == 0
@@ -149,16 +164,21 @@ def shufflenet_unit(
 
 class Net():
 
-    def __init__(self, x, cls=2, alpha=1., input_size=(224, 224), inference_only=False):
+    def __init__(
+            self, x, cls=2, alpha=1., input_size=(224, 224),
+            inference_only=False, init_params=None):
+        # init_parmas is used when loading weight pretrained on other dataset(s), normally
+        # imagenet, so the weights from the last fully connect layer should not be loaded
         assert len(input_size) == 2
         self.output_neuron = cls if cls > 2 else 1
-        self.x = x
+        self.x = x  # placeholder or data from tf.data.Dataset
         self.inference_only = inference_only
         # inference_only: so there's no need to feed is_training placholder on frozen graph
         #                 and hope graph optimization tool will fuse the constants.
-        self.is_training = tf.constant(True) if inference_only else\
-            tf.placeholder(tf.bool, name="is_training")
+        # if inference_only, self.is_training will never be used
+        self.is_training = None if inference_only else tf.placeholder(tf.bool, name="is_training")
         self.input_size = (None, *input_size, 3)
+        self.first_chs = 24
         if alpha == 0.5:
             self.first_block_chs = 48
         elif alpha == 1.:
@@ -171,15 +191,47 @@ class Net():
             import logging
             logging.error("Unexpected alpha, which should be 0.5, 1.0, 1.5, or 2.0")
             raise ValueError
-        self.build_net()
+        self.repeats = (3, 7, 3)
+        self.out = self.build_net(init_params)
 
-    def build_net(self):
-        pass
+    def build_net(self, params):
+        res = self.x
+        res = conv(res, 3, self.first_chs, 3, 2, 0, False, "SAME", params[0] if params else None)
+        res = tf.nn.max_pool(tf.nn.relu(batch_norm(
+            res, self.first_chs, self.is_training, 1, self.inference_only, 1e-5, .9,
+            *params[1:5] if params else [None])), [1, 3, 3, 1], [1, 2, 2, 1], "SAME")
+        m_cnt = 2
+        p_cnt = 5
+        in_chs = self.first_chs
+        out_chs = self.first_block_chs
+        for repeat in self.repeats:
+            res = shufflenet_unit(
+                res, in_chs, self.is_training, m_cnt, self.inference_only, out_chs,
+                params[p_cnt:p_cnt+25] if params else None)
+            m_cnt += 1
+            p_cnt += 25
+            in_chs = out_chs
+            for _ in range(repeat):
+                res = shufflenet_unit(
+                    res, in_chs, self.is_training, m_cnt, self.inference_only, None,
+                    params[p_cnt:p_cnt+15] if params else None)
+                m_cnt += 1
+                p_cnt += 15
+            out_chs *= 2
+        out_chs //= 2
+        res = tf.reshape(global_avg_pooling(res), [-1, out_chs])
+        res = fully_connected(res, out_chs, self.output_neuron, m_cnt)  # not loading from params
+        if self.output_neuron == 1:  # used on binary classification
+            res = tf.reshape(res, [-1])
+        return res
 
     def save(self, path):
         pass
 
     def load(self, path):
+        pass
+
+    def load_from_numpy(self, path):
         pass
 
     def __call__(self, x):
@@ -188,13 +240,19 @@ class Net():
 
 def _test():
     import numpy as np
-    shape = [5, 5, 4]
-    a = tf.placeholder(tf.float32, shape=[None, *shape])
-    is_training = tf.placeholder(tf.bool)
-    ab = shufflenet_unit(a, shape[-1], is_training, 0, False)
+    shape = [2, 224, 224, 3]
+    inference_only = False
+    a = tf.placeholder(tf.float32, shape=[None, *shape[1:]])
+    # ab = shufflenet_unit(a, shape[-1], is_training, 0, inference_only)
+    net = Net(a, inference_only=inference_only)
+    ab = net.out
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        print(sess.run(ab, feed_dict={a: np.random.rand(2, *shape), is_training: True}))
+        if inference_only:
+            z = sess.run(ab, feed_dict={a: np.random.rand(*shape)})
+        else:
+            z = sess.run(ab, feed_dict={a: np.random.rand(*shape), net.is_training: True})
+        print(z.shape)
 
 
 if __name__ == '__main__':
