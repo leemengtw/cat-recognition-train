@@ -1,4 +1,6 @@
 import os
+import pickle
+import numpy as np
 import tensorflow as tf
 
 
@@ -279,13 +281,17 @@ class Net():
         assert bool(params is not None) != bool(path is not None),\
                 "1 and only 1 from args \"params\" and \"path\" should be assigned."
         if path is not None:
-            import pickle
             with open(path, "rb") as f:
                 params = pickle.load(f)
         for var, param in zip(self.to_save_vars, params):
             sess.run(var.assign(param))
 
-    def __call__(self, x):
+    def save_to_numpy(self, sess, path):
+        params = [np.array(sess.run(v)) for v in self.to_save_vars]
+        with open(path, "wb") as f:
+            pickle.dump(params, f)
+
+    def __call__(self):
         return self.out
 
 
@@ -293,8 +299,6 @@ def convert_pytorch_weight_test():
 
     import os
     import logging
-    import pickle
-    import numpy as np
     import torch
     from shufflenet_v2_pytorch.shufflenetv2_base import shufflenetv2_base
     original_lvl = logging.getLogger().getEffectiveLevel()
@@ -362,29 +366,41 @@ def convert_pytorch_weight_test():
         sess.run(tf.global_variables_initializer())
         net.load_from_numpy(sess, params)
         zz = sess.run(ab, {a: ar} if inference_only else {a: ar, net.is_training: is_training})
-    del net
     diff1 = np.sqrt(np.mean((zz-z)**2))
+    logging.info("Output diff using load_from_numpy with list of params: %f" % diff1)
+    del net
+    tf.reset_default_graph()
+    a = tf.placeholder(tf.float32, shape=[None, *shape, 3])
+    net = Net(a, inference_only=inference_only, init_params=params, test_convert=True)
+    ab = net.out
+    tmp_file = "tmp.pkl"
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        net.load_from_numpy(sess, path=param_path)
+        zzz = sess.run(ab, {a: ar} if inference_only else {a: ar, net.is_training: is_training})
+        net.save_to_numpy(sess, tmp_file)
+    diff2 = np.sqrt(np.mean((zzz-z)**2))
+    logging.info("Output diff using load_from_numpy with path: %f" % diff2)
+    diff3 = np.sqrt(np.mean((zzz-zz)**2))
+    del net
     tf.reset_default_graph()
     a = tf.placeholder(tf.float32, shape=[None, *shape, 3])
     net = Net(a, inference_only=inference_only, init_params=params, test_convert=True)
     ab = net.out
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        net.load_from_numpy(sess, path=param_path)
-        zzz = sess.run(ab, {a: ar} if inference_only else {a: ar, net.is_training: is_training})
-    diff2 = np.sqrt(np.mean((zzz-z)**2))
-    diff3 = np.sqrt(np.mean((zzz-zz)**2))
-    logging.info("Output diff using load_from_numpy with list of params: %f" % diff1)
-    logging.info("Output diff using load_from_numpy with path: %f" % diff2)
-    logging.info("Output diff using different args of load_from_numpy: %f" % diff3)
+        net.load_from_numpy(sess, path=tmp_file)
+        os.remove(tmp_file)
+        zzzz = sess.run(ab, {a: ar} if inference_only else {a: ar, net.is_training: is_training})
+    diff4 = np.sqrt(np.mean((zzzz-z)**2))
+    logging.info("Output diff using save_to_numpy and load_from_numpy: %f" % diff4)
     logging.basicConfig(level=original_lvl)
-    return diff0 < 1e-5 and diff1 == 0. and diff2 == 0. and diff3 == 0.
+    return diff0 < 1e-5 and diff1 == 0. and diff2 == 0. and diff3 == 0. and diff4 == 0.
 
 
 def tf_saver_test():
     # Check if inference_only mode works
     import logging
-    import numpy as np
     original_lvl = logging.getLogger().getEffectiveLevel()
     logging.basicConfig(level=logging.INFO)
     logging.warning("Test functions do tf.reset_default_graph()!")
