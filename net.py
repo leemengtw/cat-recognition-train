@@ -10,8 +10,8 @@ def fully_connected(x, in_n, out_n, module_cnt, init_weight=None, init_b=None):
             "weight", None if init_weight is not None else [in_n, out_n], tf.float32,
             init_weight if init_weight is not None else tf.contrib.layers.xavier_initializer())
         bias = tf.get_variable(
-            "bias", None if init_b else [out_n], tf.float32,
-            init_b if init_b is not None else tf.zeros_initializer())
+            "bias", None, tf.float32,
+            init_b if init_b is not None else tf.zeros([out_n]))
         return tf.nn.xw_plus_b(x, weight, bias)
 
 
@@ -77,8 +77,8 @@ def conv(
         x = tf.nn.conv2d(x, weight, [1, stride, stride, 1], "VALID")
         if bias:
             b = tf.get_variable(
-                "bias", None if init_b is not None else [out_chs], tf.float32,
-                init_b if init_b is not None else tf.zeros_initializer())
+                "bias", None, tf.float32,
+                init_b if init_b is not None else tf.zeros([out_chs]))
             x = tf.nn.bias_add(x, b)
         return x
 
@@ -97,9 +97,8 @@ def dwise_conv(
         x = tf.nn.depthwise_conv2d(x, weight, [1, stride, stride, 1], "VALID")
         if bias:
             b = tf.get_variable(
-                "bias", None if init_b else [int(in_chs * chs_mult)],
-                tf.float32,
-                init_b if init_b else tf.zeros_initializer())
+                "bias", None, tf.float32,
+                init_b if init_b else tf.zeros([int(in_chs * chs_mult)]))
             x = tf.nn.bias_add(x, b)
         return x
 
@@ -182,9 +181,10 @@ def shufflenet_unit(
 
 class Net():
 
+    # FIXME: reuse for validation!
     def __init__(
             self, x, cls=2, alpha=1., input_size=(224, 224),
-            inference_only=False, init_params=None, test_convert=False):
+            inference_only=False, init_params=None, reuse=False, test_convert=False):
         # init_parmas is used when loading weight pretrained on other dataset(s), normally
         # imagenet, so the weights from the last fully connect layer should not be loaded
         assert len(input_size) == 2
@@ -216,7 +216,10 @@ class Net():
             logging.error("Unexpected alpha, which should be 0.5, 1.0, 1.5, or 2.0")
             raise ValueError
         self.repeats = (3, 7, 3)
-        with tf.variable_scope(self.graph_name_prefix):
+        if isinstance(init_params, str):
+            with open(init_params, "rb") as f:
+                init_params = pickle.load(f)
+        with tf.variable_scope(self.graph_name_prefix, reuse=reuse):
             self.out = self.build_net(init_params)
         self.to_save_vars = [
             v for v in tf.global_variables() if v.name.startswith(self.graph_name_prefix)]
@@ -293,6 +296,30 @@ class Net():
 
     def __call__(self):
         return self.out
+
+
+def reuse_test():
+    import logging
+    original_lvl = logging.getLogger().getEffectiveLevel()
+    logging.basicConfig(level=logging.INFO)
+    logging.warning("Test functions do tf.reset_default_graph()!")
+    tf.reset_default_graph()
+
+    shape = [2, 224, 224, 3]
+    nx = (np.random.rand(*shape) * 10 - 5).astype(np.float32)
+    a = tf.placeholder(tf.float32, shape=[None, *shape[1:]])
+    tnet = Net(a)
+    ab1 = tnet.out
+    vnet = Net(a, reuse=True)
+    ab2 = vnet.out
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        z1 = sess.run(ab1, {a: nx, tnet.is_training: False})
+        z2 = sess.run(ab2, {a: nx, vnet.is_training: False})
+    diff = np.sqrt(np.mean((z1-z2)**2))
+    logging.info("Output diff between original net and reused net: %f" % diff)
+    logging.basicConfig(level=original_lvl)
+    return diff == 0.
 
 
 def convert_pytorch_weight_test():
@@ -440,4 +467,7 @@ if __name__ == '__main__':
     logging.info("Checking save/load functionality; it may take a while...")
     tf_saver_ok = tf_saver_test()
     logging.info("OK" if tf_saver_ok else "Failed")
-    assert convert_ok and tf_saver_ok
+    logging.info("Checking reuse functionality; it may take a while...")
+    reuse_ok = reuse_test()
+    logging.info("OK" if reuse_ok else "Failed")
+    assert convert_ok and tf_saver_ok and reuse_ok

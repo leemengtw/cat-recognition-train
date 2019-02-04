@@ -6,10 +6,15 @@ import logging
 import tensorflow as tf
 
 
+MEAN = [v * 255 for v in [0.485, 0.456, 0.406]]
+STD = [v * 255 for v in [0.229, 0.224, 0.225]]
+
+
 class Dataset():
 
     def __init__(
             self,
+            folder,
             train=True,
             size=(224, 224),
             batch_size=64,
@@ -22,10 +27,16 @@ class Dataset():
         self.train = train
         self.size = size
         self.val = val
-        self.root = os.path.join("datasets", "train" if train else "test1")
+        self.root = os.path.join(folder, "train" if train else "test1")
         paths = sorted(glob(os.path.join(self.root, "*.jpg")))
-        if self.train:
 
+        def _normalize(img):
+            # imagenet mean and std
+            mean = tf.constant([[MEAN]], dtype=tf.float32)
+            std = tf.constant([[STD]], dtype=tf.float32)
+            return (img - mean) / std
+
+        if self.train:
             cat_cnt = sum("cat" in p for p in paths)
             dog_cnt = len(paths) - cat_cnt
             cat_vsize = int(cat_cnt * valratio)
@@ -61,6 +72,7 @@ class Dataset():
                         (_random_resize, None)]
 
                 def _process(img, label):
+                    label = tf.cast(label, tf.float32)
                     img = tf.image.decode_jpeg(tf.read_file(img))
                     if is_train:
                         aug_prob = tf.random_uniform(shape=[4], minval=0., maxval=1.)
@@ -70,7 +82,7 @@ class Dataset():
                                 tf.math.greater(aug_prob[i], .5),
                                 (lambda: func(img, *args)) if args else (lambda: func(img)),
                                 lambda: img)
-                    return tf.image.resize_images(img, self.size), label
+                    return _normalize(tf.image.resize_images(img, self.size)), label
 
                 return dataset.map(_process)
 
@@ -92,8 +104,8 @@ class Dataset():
             paths = tf.constant(paths)
             dataset = tf.data.Dataset.from_tensor_slices(paths)
             self.dataset = dataset.map(
-                lambda img: tf.image.resize_images(
-                    tf.image.decode_jpeg(tf.read_file(img)), self.size)).batch(batch_size)
+                lambda img: _normalize(tf.image.resize_images(
+                    tf.image.decode_jpeg(tf.read_file(img)), self.size))).batch(batch_size)
             self.iterator = self.dataset.make_initializable_iterator()
 
     def get_batch(self):
@@ -132,7 +144,7 @@ def _test():
     epochs = 2
     is_train = True
     is_val = False
-    d = Dataset(epochs=epochs, train=is_train, val=is_val)
+    d = Dataset("datasets", epochs=epochs, train=is_train, val=is_val)
     sess = tf.Session()
     if not is_train or is_val:
         d.initialize(sess)
@@ -143,7 +155,7 @@ def _test():
     import time
     t = time.time()
     for i in range(d.get_total_batches()):
-        _ = sess.run(next_item)
+        v, k = sess.run(next_item)
         print(i // b_per_epoch + 1, i % b_per_epoch + 1, end='\033[K\r')
     try:
         while True:
