@@ -275,16 +275,32 @@ class Net():
         else:
             self.saver.restore(sess, tf.train.latest_checkpoint(directory))
 
-    def load_from_numpy(self, sess, path):
-        pass
+    def load_from_numpy(self, sess, params=None, path=None):
+        assert bool(params is not None) != bool(path is not None),\
+                "1 and only 1 from args \"params\" and \"path\" should be assigned."
+        if path is not None:
+            import pickle
+            with open(path, "rb") as f:
+                params = pickle.load(f)
+        for var, param in zip(self.to_save_vars, params):
+            sess.run(var.assign(param))
 
     def __call__(self, x):
         return self.out
 
 
-def convert_pytorch_weight():
+def convert_pytorch_weight_test():
 
+    import os
     import logging
+    import pickle
+    import numpy as np
+    import torch
+    from shufflenet_v2_pytorch.shufflenetv2_base import shufflenetv2_base
+    original_lvl = logging.getLogger().getEffectiveLevel()
+    logging.basicConfig(level=logging.INFO)
+    logging.warning("Test functions do tf.reset_default_graph()!")
+    tf.reset_default_graph()
 
     def p_load(net, sd):
         cnt = 0
@@ -295,10 +311,6 @@ def convert_pytorch_weight():
             cnt += 1
         logging.info("%d params loaded" % cnt)
 
-    import os
-    import numpy as np
-    import torch
-    from shufflenet_v2_pytorch.shufflenetv2_base import shufflenetv2_base
     ar = np.random.rand(2, 224, 224, 3).astype(np.float32) * 10 - 5
     tnet = shufflenetv2_base()
     tar = torch.from_numpy(ar.transpose(0, 3, 1, 2))
@@ -332,24 +344,51 @@ def convert_pytorch_weight():
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         z = sess.run(ab, {a: ar} if inference_only else {a: ar, net.is_training: is_training})
-    diff = np.sqrt(np.mean((tout-z)**2))
-    logging.info("Output diff between tensorflow and pytorch: %f" % diff)
-    if diff > 1e-5:
+    diff0 = np.sqrt(np.mean((tout-z)**2))
+    logging.info("Output diff between tensorflow and pytorch: %f" % diff0)
+    if diff0 > 1e-5:
         logging.warning(
-            "Output diff between tensorflow and pytorch is bigger than 1e-5 (%f)" % diff)
-    import pickle
+            "Output diff between tensorflow and pytorch is bigger than 1e-5 (%f)" % diff0)
     param_path = "imagenet_pretrained_shufflenetv2_1.0.pkl"
     with open(param_path, "wb") as f:
         pickle.dump(params, f)
     logging.info("Transposed numpy weights from pytorch model saved to %s" % param_path)
+    del net
+    tf.reset_default_graph()
+    a = tf.placeholder(tf.float32, shape=[None, *shape, 3])
+    net = Net(a, inference_only=inference_only, init_params=params, test_convert=True)
+    ab = net.out
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        net.load_from_numpy(sess, params)
+        zz = sess.run(ab, {a: ar} if inference_only else {a: ar, net.is_training: is_training})
+    del net
+    diff1 = np.sqrt(np.mean((zz-z)**2))
+    tf.reset_default_graph()
+    a = tf.placeholder(tf.float32, shape=[None, *shape, 3])
+    net = Net(a, inference_only=inference_only, init_params=params, test_convert=True)
+    ab = net.out
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        net.load_from_numpy(sess, path=param_path)
+        zzz = sess.run(ab, {a: ar} if inference_only else {a: ar, net.is_training: is_training})
+    diff2 = np.sqrt(np.mean((zzz-z)**2))
+    diff3 = np.sqrt(np.mean((zzz-zz)**2))
+    logging.info("Output diff using load_from_numpy with list of params: %f" % diff1)
+    logging.info("Output diff using load_from_numpy with path: %f" % diff2)
+    logging.info("Output diff using different args of load_from_numpy: %f" % diff3)
+    logging.basicConfig(level=original_lvl)
+    return diff0 < 1e-5 and diff1 == 0. and diff2 == 0. and diff3 == 0.
 
 
-def _test():
+def tf_saver_test():
     # Check if inference_only mode works
-    import numpy as np
     import logging
+    import numpy as np
     original_lvl = logging.getLogger().getEffectiveLevel()
     logging.basicConfig(level=logging.INFO)
+    logging.warning("Test functions do tf.reset_default_graph()!")
+    tf.reset_default_graph()
     shape = [2, 224, 224, 3]
     directory = "ckpts"
     a = tf.placeholder(tf.float32, shape=[None, *shape[1:]])
@@ -360,7 +399,6 @@ def _test():
         writer = tf.summary.FileWriter("runs", sess.graph)
         sess.run(tf.global_variables_initializer())
         z = sess.run(ab, feed_dict={a: nx, net.is_training: False})
-        logging.info(z.shape)
         net.save(sess, directory, "0")
         writer.close()
     del net
@@ -371,11 +409,19 @@ def _test():
     with tf.Session() as sess:
         net.load(sess, directory)
         zz = sess.run(ab, feed_dict={a: nx})
-    logging.info(
-        "Output diff between original params and loaded params: %f" % np.sqrt(np.mean((z-zz)**2)))
+    diff = np.sqrt(np.mean((z-zz)**2))
+    logging.info("Output diff between original params and loaded params: %f" % diff)
     logging.basicConfig(level=original_lvl)
+    return diff == 0.
 
 
 if __name__ == '__main__':
-    # convert_pytorch_weight()
-    _test()
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logging.info("Checking convert and load_from_numpy functionality; it may take a while...")
+    convert_ok = convert_pytorch_weight_test()
+    logging.info("OK" if convert_ok else "Failed")
+    logging.info("Checking save/load functionality; it may take a while...")
+    tf_saver_ok = tf_saver_test()
+    logging.info("OK" if tf_saver_ok else "Failed")
+    assert convert_ok and tf_saver_ok
