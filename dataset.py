@@ -72,7 +72,7 @@ class Dataset():
                         (_random_resize, None)]
 
                 def _process(img, label):
-                    label = tf.cast(label, tf.float32)
+                    # label = tf.cast(label, tf.float32)
                     img = tf.image.decode_jpeg(tf.read_file(img))
                     if is_train:
                         aug_prob = tf.random_uniform(shape=[4], minval=0., maxval=1.)
