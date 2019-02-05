@@ -11,7 +11,7 @@ parser.add_argument("--data_folder", type=str, default="datasets")
 parser.add_argument("--epochs", type=int, default=400)
 parser.add_argument("--initial_learning_rate", type=float, default=1e-3)
 parser.add_argument("--save_interval", type=int, default=10)
-parser.add_argument("--valset_ratio", type=float, default=.01)
+parser.add_argument("--valset_ratio", type=float, default=.1)
 parser.add_argument("--random_seed", type=int, default=0)
 parser.add_argument(
     "--initial_weights", type=str, default="imagenet_pretrained_shufflenetv2_1.0.pkl")
