@@ -4,6 +4,16 @@ import tensorflow as tf
 from dataset import Dataset
 from net import Net
 
+__no_tqdm__ = False
+try:
+    from tqdm import tqdm
+except (ModuleNotFoundError, ImportError):
+    __no_tqdm__ = True
+
+
+def _tqdm(res):
+    return res
+
 
 class Trainer():
 
@@ -19,7 +29,12 @@ class Trainer():
             logdir="runs",
             savedir="ckpts",
             random_seed=0,
-            logger=None):
+            logger=None,
+            show_progress=True):
+        if not show_progress or __no_tqdm__:
+            self.tqdm = _tqdm
+        else:
+            self.tqdm = tqdm
         if logger is not None:
             self.logger = logger
         else:
@@ -28,6 +43,7 @@ class Trainer():
             self.logger.setLevel(logging.info)
             self.logger.warning("You are using the root logger, which has bad a format.")
             self.logger.warning("Please consider passing a better logger.")
+        self.epochs = epochs
         subdir = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
         self.savedir = os.path.join(savedir, subdir)
         if not os.path.isdir(self.savedir):
@@ -39,14 +55,17 @@ class Trainer():
         self.logger.info("Preparing dataset...")
         self.trainset = Dataset(
             data_folder, True, (input_size, input_size),
-            batch_size, None, epochs, valset_ratio, random_seed)
+            batch_size, None, valset_ratio, random_seed)
         self.total_pred = tf.constant(self.trainset.val_length, name="total_pred")
         self.logger.info("Generating training operations...")
-        train_x, train_y = self.trainset.train_iterator.get_next()
-        self._build_train_graph(train_x, train_y, init_lr, init_params)
+        # train_x, train_y = self.trainset.train_iterator.get_next()
+        x, y = self.trainset.get_next()
+        # self._build_train_graph(train_x, train_y, init_lr, init_params)
+        self._build_train_graph(x, y, init_lr, init_params)
         self.logger.info("Generating validation operations...")
-        val_x, val_y = self.trainset.val_iterator.get_next()
-        self._build_val_graph(val_x, val_y)
+        # val_x, val_y = self.trainset.val_iterator.get_next()
+        # self._build_val_graph(val_x, val_y)
+        self._build_val_graph(x, y)
         self.sess = tf.Session()
         self.sum_writer = tf.summary.FileWriter(self.logdir, self.sess.graph)
         self.sess.run(tf.global_variables_initializer())
@@ -87,8 +106,8 @@ class Trainer():
         return loss_mean, accum_loss, avg_loss, reset_loss
 
     def eval(self, epoch, save=True):
-        self.trainset.initialize(self.sess)  # inits valset inside trainset
-        for i in range(self.trainset.val_total_batches):
+        self.trainset.initialize(self.sess, False)  # inits valset inside trainset
+        for i in range(len(self.trainset)):
             self.sess.run(
                 [self.accum_correct, self.val_accum_loss], {self.val_net.is_training: False})
         acc, loss, summary = self.sess.run([self.accuracy, self.val_avg_loss, self.val_summary])
@@ -116,15 +135,19 @@ class Trainer():
         self.train_net.save(self.sess, self.savedir, "latest")
 
     def fit(self):
-        train_batch_per_epoch = self.trainset.train_batch_per_epoch
+        # train_batch_per_epoch = self.trainset.train_batch_per_epoch
         self.logger.info("Starts training...")
-        for i in range(self.trainset.train_total_batches):
-            self.sess.run([
-                self.train_accum_loss, self.train_op], {self.train_net.is_training: True})
-            if i % train_batch_per_epoch + 1 == train_batch_per_epoch:
-                epoch = i // train_batch_per_epoch + 1
-                self.summarize(epoch)
-        self.summarize(epoch + 1)
+        # for i in range(self.trainset.train_total_batches):
+        for epoch in range(1, self.epochs + 1):
+            self.trainset.initialize(self.sess, True)
+            self.logger.info("Epoch %d begins..." % epoch)
+            for i in self.tqdm(range(1, len(self.trainset) + 1), desc="[Epoch %d]" % epoch):
+                self.sess.run([
+                    self.train_accum_loss, self.train_op], {self.train_net.is_training: True})
+            # if i % train_batch_per_epoch + 1 == train_batch_per_epoch:
+            #     epoch = i // train_batch_per_epoch + 1
+            #     self.summarize(epoch)
+            self.summarize(epoch)
         self.logger.info("Model fitting done.")
 
 
@@ -153,6 +176,7 @@ if __name__ == "__main__":
                         choices=["debug", "info", "warning", "error", "critical"])
     parser.add_argument("--logger_out_file", type=str, default=None)
     parser.add_argument("--show_tf_cpp_log", action="store_true")
+    parser.add_argument("--not_show_progress_bar", action="store_true")
     args = parser.parse_args()
 
     if not args.show_tf_cpp_log:
@@ -175,6 +199,7 @@ if __name__ == "__main__":
         fhandler = logging.StreamHandler(open(args.logger_out_file, "a"))
         fhandler.setFormatter(formatter)
         logger.addHandler(fhandler)
-
-    main(args.data_folder, args.batch_size, args.input_size, args.valset_ratio, args.epochs,
-         args.init_lr, args.init_params, args.logdir, args.savedir, args.random_seed, logger)
+    main(
+        args.data_folder, args.batch_size, args.input_size, args.valset_ratio,
+        args.epochs, args.init_lr, args.init_params, args.logdir,
+        args.savedir, args.random_seed, logger, not args.not_show_progress_bar)
