@@ -23,7 +23,7 @@ class Trainer():
             batch_size=64,
             input_size=224,
             valset_ratio=.1,
-            epochs=400,
+            epochs=90,
             init_lr=1e-3,
             init_params=None,
             logdir="runs",
@@ -50,21 +50,25 @@ class Trainer():
             os.makedirs(self.savedir)
         with open(os.path.join(self.savedir, "history"), "a") as fp:
             fp.write("%s\n" % subdir)
+        self.logger.info("Model checkpoints will be saved to %s" % self.savedir)
         self.logdir = os.path.join(logdir, subdir)
+        self.logger.info("Summary for TensorBaord will be saved to %s" % self.logdir)
+        self.logger.info(
+            "You can use \"tensorboard --logdir %s\" to see all training summaries." % logdir)
+        # logdir: folder containing all training histories
+        # self.logdir: folder containing current training summary
         self.best_avg_val_loss, self.best_acc = float("inf"), 0.
         self.logger.info("Preparing dataset...")
         self.trainset = Dataset(
             data_folder, True, (input_size, input_size),
             batch_size, None, valset_ratio, random_seed)
+        self.logger.debug("%d training instances, %d validation instances" % (
+            self.trainset.train_length, self.trainset.val_length))
         self.total_pred = tf.constant(self.trainset.val_length, name="total_pred")
         self.logger.info("Generating training operations...")
-        # train_x, train_y = self.trainset.train_iterator.get_next()
         x, y = self.trainset.get_next()
-        # self._build_train_graph(train_x, train_y, init_lr, init_params)
         self._build_train_graph(x, y, init_lr, init_params)
         self.logger.info("Generating validation operations...")
-        # val_x, val_y = self.trainset.val_iterator.get_next()
-        # self._build_val_graph(val_x, val_y)
         self._build_val_graph(x, y)
         self.sess = tf.Session()
         self.sum_writer = tf.summary.FileWriter(self.logdir, self.sess.graph)
@@ -107,7 +111,7 @@ class Trainer():
 
     def eval(self, epoch, save=True):
         self.trainset.initialize(self.sess, False)  # inits valset inside trainset
-        for i in range(len(self.trainset)):
+        for _ in self.tqdm(range(len(self.trainset)), desc="[Epoch %d Evaluation]" % epoch):
             self.sess.run(
                 [self.accum_correct, self.val_accum_loss], {self.val_net.is_training: False})
         acc, loss, summary = self.sess.run([self.accuracy, self.val_avg_loss, self.val_summary])
@@ -117,11 +121,11 @@ class Trainer():
         self.sess.run([self.reset_correct, self.val_reset_loss])
         if save:
             if acc > self.best_acc:
-                self.logger.info("Epoch %d has currently best accuracy: %f" % (epoch, acc))
+                self.logger.info("Epoch %d has the best accuracy so far: %f" % (epoch, acc))
                 self.best_acc = acc
                 self.train_net.save(self.sess, self.savedir, "best_acc")
             if loss < self.best_avg_val_loss:
-                self.logger.info("Epoch %d has currently best avg_val_loss: %f" % (epoch, loss))
+                self.logger.info("Epoch %d has the best avg_val_loss so far: %f" % (epoch, loss))
                 self.best_avg_val_loss = loss
                 self.train_net.save(self.sess, self.savedir, "best_avg_val_loss")
 
@@ -135,18 +139,14 @@ class Trainer():
         self.train_net.save(self.sess, self.savedir, "latest")
 
     def fit(self):
-        # train_batch_per_epoch = self.trainset.train_batch_per_epoch
         self.logger.info("Starts training...")
-        # for i in range(self.trainset.train_total_batches):
         for epoch in range(1, self.epochs + 1):
             self.trainset.initialize(self.sess, True)
             self.logger.info("Epoch %d begins..." % epoch)
-            for i in self.tqdm(range(1, len(self.trainset) + 1), desc="[Epoch %d]" % epoch):
+            for _ in self.tqdm(range(1, len(self.trainset) + 1),
+                               desc="[Epoch %d/%d]" % (epoch, self.epochs)):
                 self.sess.run([
                     self.train_accum_loss, self.train_op], {self.train_net.is_training: True})
-            # if i % train_batch_per_epoch + 1 == train_batch_per_epoch:
-            #     epoch = i // train_batch_per_epoch + 1
-            #     self.summarize(epoch)
             self.summarize(epoch)
         self.logger.info("Model fitting done.")
 
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--input_size", type=int, default=224)
     parser.add_argument("--valset_ratio", type=float, default=.1)
-    parser.add_argument("--epochs", type=int, default=400)
+    parser.add_argument("--epochs", type=int, default=90)
     parser.add_argument("--init_lr", type=float, default=1e-3)
     parser.add_argument(
         "--init_params", type=str, default="imagenet_pretrained_shufflenetv2_1.0.pkl")
