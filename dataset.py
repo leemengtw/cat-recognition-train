@@ -146,7 +146,7 @@ def _test():
     is_val = False
     d = Dataset("datasets", epochs=epochs, train=is_train, val=is_val)
     sess = tf.Session()
-    if not is_train or is_val:
+    if not is_train or is_val:  # 3 modes: train, val, test
         d.initialize(sess)
     next_item = d.get_batch()
     i = 0
