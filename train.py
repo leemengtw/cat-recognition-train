@@ -1,4 +1,6 @@
+import os
 import argparse
+from datetime import datetime
 import tensorflow as tf
 from dataset import Dataset
 from net import Net
@@ -6,11 +8,11 @@ from net import Net
 parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", type=int, default=64)
 parser.add_argument("--logdir", type=str, default="runs")
+parser.add_argument("--savedir", type=str, default="ckpts")
 parser.add_argument("--net_input_size", type=int, default=224)
 parser.add_argument("--data_folder", type=str, default="datasets")
 parser.add_argument("--epochs", type=int, default=400)
 parser.add_argument("--initial_learning_rate", type=float, default=1e-3)
-parser.add_argument("--save_interval", type=int, default=10)
 parser.add_argument("--valset_ratio", type=float, default=.1)
 parser.add_argument("--random_seed", type=int, default=0)
 parser.add_argument(
@@ -21,6 +23,14 @@ args = parser.parse_args()
 class Trainer():
 
     def __init__(self):
+        subdir = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        self.savedir = os.path.join(args.savedir, subdir)
+        if not os.path.isdir(self.savedir):
+            os.makedirs(self.savedir)
+        with open(os.path.join(self.savedir, "history"), "a") as fp:
+            fp.write("%s\n" % subdir)
+        self.logdir = os.path.join(args.logdir, subdir)
+        self.best_loss, self.best_acc = float("inf"), 0.
         self.trainset = Dataset(
             args.data_folder, True, (args.net_input_size, args.net_input_size),
             args.batch_size, None, args.epochs, False, args.valset_ratio, args.random_seed)
@@ -30,7 +40,7 @@ class Trainer():
         val_x, val_y = self.trainset.val_iterator.get_next()
         self._build_val_graph(val_x, val_y)
         self.sess = tf.Session()
-        self.sum_writer = tf.summary.FileWriter(args.logdir, self.sess.graph)
+        self.sum_writer = tf.summary.FileWriter(self.logdir, self.sess.graph)
         self.sess.run(tf.global_variables_initializer())
 
     def _build_train_graph(self, train_x, train_y):
@@ -68,15 +78,21 @@ class Trainer():
         reset_loss = tf.assign(total_loss, 0.)
         return loss_mean, accum_loss, avg_loss, reset_loss
 
-    def eval(self, epoch):
-        self.trainset.initialize(self.sess)
+    def eval(self, epoch, save=True):
+        self.trainset.initialize(self.sess)  # inits valset inside trainset
         for i in range(self.trainset.val_total_batches):
             self.sess.run(
                 [self.accum_correct, self.val_accum_loss], {self.val_net.is_training: False})
         acc, loss, summary = self.sess.run([self.accuracy, self.val_avg_loss, self.val_summary])
-        self.sess.run([self.reset_correct, self.val_reset_loss])
         self.sum_writer.add_summary(summary, epoch)
-        print("acc: %f" % acc, "loss: %f" % loss)
+        self.sess.run([self.reset_correct, self.val_reset_loss])
+        if save:
+            if acc > self.best_acc:
+                self.best_acc = acc
+                self.train_net.save(self.sess, self.savedir, "best_acc")
+            if loss < self.best_loss:
+                self.best_loss = loss
+                self.train_net.save(self.sess, self.savedir, "best_loss")
 
     def fit(self):
         train_batch_per_epoch = self.trainset.train_batch_per_epoch
@@ -88,6 +104,7 @@ class Trainer():
                 self.sum_writer.add_summary(self.sess.run(self.train_summary), epoch)
                 self.eval(epoch)
                 self.sess.run(self.train_reset_loss)
+                self.train_net.save(self.sess, self.savedir, "latest")
 
 
 def main():

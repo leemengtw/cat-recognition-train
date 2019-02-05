@@ -286,6 +286,8 @@ class Net():
         if path is not None:
             with open(path, "rb") as f:
                 params = pickle.load(f)
+        # If len(params) < len(self.to_save_vars),
+        # the tail of self.to_save_vars remains the same
         for var, param in zip(self.to_save_vars, params):
             sess.run(var.assign(param))
 
