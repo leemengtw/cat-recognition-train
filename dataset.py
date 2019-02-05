@@ -2,7 +2,6 @@ import os
 from math import ceil
 from glob import glob
 import random
-import logging
 import tensorflow as tf
 
 
@@ -20,13 +19,11 @@ class Dataset():
             batch_size=64,
             shuffle_buffer=None,
             epochs=1,
-            val=False,
             valratio=0.1,
             random_seed=0):
         random.seed(random_seed)
         self.train = train
         self.size = size
-        self.val = val
         self.root = os.path.join(folder, "train" if train else "test1")
         paths = sorted(glob(os.path.join(self.root, "*.jpg")))
 
@@ -90,7 +87,6 @@ class Dataset():
             self.val_length = len(val_paths)
             self.val_dataset = to_dataset(val_paths, False).batch(batch_size)
             self.train_dataset = to_dataset(train_paths, True).batch(batch_size)
-            self.dataset = self.val_dataset if val else self.train_dataset
             self.train_total_batches = ceil(self.train_length * epochs / batch_size)
             self.val_total_batches = ceil(self.val_length / batch_size)
             self.train_batch_per_epoch = ceil(self.train_total_batches / epochs)
@@ -108,53 +104,30 @@ class Dataset():
                     tf.image.decode_jpeg(tf.read_file(img)), self.size))).batch(batch_size)
             self.iterator = self.dataset.make_initializable_iterator()
 
-    def get_batch(self):
-        if self.train:
-            return self.val_iterator.get_next() if self.val else self.train_iterator.get_next()
-        else:
-            return self.iterator.get_next()
-
     def initialize(self, sess):
         sess.run(self.val_iterator.initializer if self.train else self.iterator.initializer)
-
-    def get_total_batches(self):
-        if self.train:
-            return self.val_total_batches if self.val else self.train_total_batches
-        else:
-            return self.total_batches
-
-    def get_batch_per_epoch(self):
-        if self.train:
-            return self.val_batch_per_epoch if self.val else self.train_batch_per_epoch
-        else:
-            return self.batch_per_epoch
-
-    def eval(self):
-        if not self.train:
-            logging.warning("Dataset.eval takes no effect in test mode")
-        self.val = True
-
-    def train(self):
-        if not self.train:
-            logging.warning("Dataset.train takes no effect in test mode")
-        self.val = False
 
 
 def _test():
     epochs = 2
     is_train = True
     is_val = False
-    d = Dataset("datasets", epochs=epochs, train=is_train, val=is_val)
+    d = Dataset("datasets", epochs=epochs, train=is_train)
     sess = tf.Session()
     if not is_train or is_val:  # 3 modes: train, val, test
         d.initialize(sess)
-    next_item = d.get_batch()
+    if is_train:
+        next_item = d.val_iterator.get_next() if is_val else d.train_iterator.get_next()
+        b_per_epoch = d.val_batch_per_epoch if is_val else d.train_batch_per_epoch
+        total_batches = d.val_total_batches if is_val else d.train_total_batches
+    else:
+        next_item = d.iterator.get_next()
+        b_per_epoch = d.batch_per_epoch
+        total_batches = d.total_batches
     i = 0
-    b_per_epoch = d.get_batch_per_epoch()
-    print(b_per_epoch, d.get_total_batches(), d.get_batch_per_epoch())
     import time
     t = time.time()
-    for i in range(d.get_total_batches()):
+    for i in range(total_batches):
         v, k = sess.run(next_item)
         print(i // b_per_epoch + 1, i % b_per_epoch + 1, end='\033[K\r')
     try:

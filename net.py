@@ -212,9 +212,7 @@ class Net():
         elif alpha == 2.:
             self.first_block_chs = 244
         else:
-            import logging
-            logging.error("Unexpected alpha, which should be 0.5, 1.0, 1.5, or 2.0")
-            raise ValueError
+            raise ValueError("Unexpected alpha, which should be 0.5, 1.0, 1.5, or 2.0")
         self.repeats = (3, 7, 3)
         if isinstance(init_params, str):
             with open(init_params, "rb") as f:
