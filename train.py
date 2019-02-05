@@ -124,6 +124,8 @@ class Trainer():
             if i % train_batch_per_epoch + 1 == train_batch_per_epoch:
                 epoch = i // train_batch_per_epoch + 1
                 self.summarize(epoch)
+        self.summarize(epoch + 1)
+        self.logger.info("Model fitting done.")
 
 
 def main(*args):
