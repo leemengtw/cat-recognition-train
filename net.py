@@ -448,14 +448,20 @@ def tf_saver_test():
     tf.reset_default_graph()
     a = tf.placeholder(tf.float32, shape=[None, *shape[1:]])
     net = Net(a, inference_only=True)
+    vnet = Net(a, inference_only=True, reuse=True)
     ab = net.out
+    vab = vnet.out
     with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
         net.load(sess, directory)
         zz = sess.run(ab, feed_dict={a: nx})
-    diff = np.sqrt(np.mean((z-zz)**2))
-    logging.info("Output diff between original params and loaded params: %f" % diff)
+        zzz = sess.run(vab, feed_dict={a: nx})
+    diff0 = np.sqrt(np.mean((z-zz)**2))
+    diff1 = np.sqrt(np.mean((zz-zzz)**2))
+    logging.info("Output diff between original params and loaded params: %f" % diff0)
+    logging.info("Output diff between loaded params and reused net: %f" % diff1)
     logging.basicConfig(level=original_lvl)
-    return diff == 0.
+    return diff0 == 0. and diff1 == 0.
 
 
 if __name__ == '__main__':

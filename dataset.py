@@ -16,7 +16,7 @@ class Dataset():
             folder,
             train=True,
             size=(224, 224),
-            batch_size=64,
+            batch_size=8,
             shuffle_buffer=None,
             valratio=0.1,
             random_seed=0):
