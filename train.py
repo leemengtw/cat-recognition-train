@@ -4,6 +4,7 @@ from datetime import datetime
 import tensorflow as tf
 from dataset import Dataset
 from net import Net
+from tensorflow.tools.graph_transforms import TransformGraph
 
 __no_tqdm__ = False
 try:
@@ -21,7 +22,7 @@ class Trainer():
     def __init__(
             self,
             data_folder="dataset",
-            batch_size=8,
+            batch_size=64,
             input_size=224,
             valset_ratio=.1,
             epochs=90,
@@ -33,6 +34,14 @@ class Trainer():
             logger=None,
             show_progress=True,
             restore=None):
+        if logger is not None:
+            self.logger = logger
+        else:
+            import logging
+            self.logger = logging.getLogger()
+            self.logger.setLevel(logging.info)
+            self.logger.warning("You are using the root logger, which has bad a format.")
+            self.logger.warning("Please consider passing a better logger.")
         self.exported = False
         self.best_avg_val_loss, self.best_acc = float("inf"), 0.
         self.epoch = 1
@@ -40,10 +49,11 @@ class Trainer():
         self.logdir = os.path.join(logdir, subdir)
         self.savedir = os.path.join(savedir, subdir)
         if restore is not None:
+            self.logger.info("Restoring training progress from %s..." % restore)
             with open(os.path.join(restore, "config.pkl"), "rb") as f:
                 (data_folder, batch_size, input_size, valset_ratio,
                  epochs, self.best_avg_val_loss, self.best_acc,
-                 self.logdir, self.savedir) = pickle.load(f)
+                 self.logdir, self.savedir, random_seed) = pickle.load(f)
             with open(os.path.join(restore, "current_epoch.txt"), "r") as f:
                 self.epoch = int(f.read())
             if os.path.exists(os.path.join(restore, "net_latest.meta")) and\
@@ -61,7 +71,7 @@ class Trainer():
                 pickle.dump(
                     (data_folder, batch_size, input_size, valset_ratio,
                      epochs, self.best_avg_val_loss, self.best_acc,
-                     self.logdir, self.savedir),
+                     self.logdir, self.savedir, random_seed),
                     f)
             with open(os.path.join(self.savedir, "current_epoch.txt"), "w") as f:
                 f.write(str(self.epoch))
@@ -69,14 +79,6 @@ class Trainer():
             self.tqdm = _tqdm
         else:
             self.tqdm = tqdm
-        if logger is not None:
-            self.logger = logger
-        else:
-            import logging
-            self.logger = logging.getLogger()
-            self.logger.setLevel(logging.info)
-            self.logger.warning("You are using the root logger, which has bad a format.")
-            self.logger.warning("Please consider passing a better logger.")
         tf.set_random_seed(random_seed)
         self.epochs = epochs
         self.logger.info("Model checkpoints will be saved to %s" % self.savedir)
@@ -116,7 +118,8 @@ class Trainer():
                     "No optimizer ckpt file found in %s; not loading optim params" % restore)
 
     def _build_train_graph(self, train_x, train_y, init_lr, init_params=None):
-        self.train_net = Net(train_x, init_params=init_params)
+        self.train_net = Net(
+            train_x, input_size=(self.input_size, self.input_size), init_params=init_params)
         loss, self.train_accum_loss, self.train_avg_loss, self.train_reset_loss = \
             self._build_loss_graph(self.train_net.out, train_y, "train")
         with tf.variable_scope("optim_vars"):
@@ -128,7 +131,7 @@ class Trainer():
         self.train_summary = tf.summary.scalar("training loss", self.train_avg_loss)
 
     def _build_val_graph(self, val_x, val_y):
-        self.val_net = Net(val_x, reuse=True)  # no need to pass init_params since it's reused
+        self.val_net = Net(val_x, input_size=(self.input_size, self.input_size), reuse=True)
         cur_currect = tf.reduce_sum(
             tf.cast(tf.equal(tf.cast(self.val_net.out > 0, tf.int32), val_y), tf.int32))
         total_correct = tf.get_variable("total_correct", None, tf.int32, tf.constant(0))
@@ -183,7 +186,7 @@ class Trainer():
     def summarize(self, epoch):
         if self.exported:
             raise Exception("%s %s" % (
-                    "Model exported and all graphs are reset; ",
+                    "Model exported and all graphs are reset;",
                     "please reinitialize the trainer if you want to summarize the model."))
         avg_loss, cur_summary = self.sess.run([self.train_avg_loss, self.train_summary])
         self.sum_writer.add_summary(cur_summary, epoch)
@@ -215,21 +218,43 @@ class Trainer():
         self.logger.info("Model fitting done.")
 
     def export_best(self):
+        self.logger.info("Exporting models of best accuracy and loss to optimized frozen pbs...")
         self.export("net_best_acc")
         self.export("net_best_loss")
 
     # TODO: finish this!
-    def export(self, fname):
+    def export(self, ckptname):
+        self.logger.warning("%s %s" % (
+            "Exporting model leads to graph reset;",
+            "Please reinitialize the trainer if you want to continue training."))
         self.exported = True
+        self.sess.close()
         tf.reset_default_graph()
-        # x = tf.placeholder(tf.float32, [None, self.input_size, self.input_size, 3], name="x")
-        # net = Net(x, inference_only=True)
-        # FIXME
+        x = tf.placeholder(tf.float32, [None, self.input_size, self.input_size, 3], name="x")
+        net = Net(x, input_size=(self.input_size, self.input_size), inference_only=True)
+        self.sess = tf.Session(graph=tf.get_default_graph())
+        net.load(self.sess, self.savedir, ckptname)
+        npypath = os.path.join(self.savedir, "%s.pkl" % ckptname)
+        net.save_to_numpy(self.sess, npypath)
+        self.logger.info("Params of list of numpy array format saved to %s" % npypath)
+        in_graph_def = tf.get_default_graph().as_graph_def()
+        out_graph_def = tf.graph_util.convert_variables_to_constants(
+            self.sess, in_graph_def, [net.out.op.name])
+        out_graph_def = TransformGraph(out_graph_def, ["x"], [net.out.op.name],
+                                       ["strip_unused_nodes",
+                                        "fold_constants(ignore_errors=true)",
+                                        "fold_batch_norms",
+                                        "fold_old_batch_norms"])
+        ckptpath = os.path.join(self.savedir, "optimized_%s.pb" % ckptname)
+        with tf.gfile.GFile(ckptpath, 'wb') as f:
+            f.write(out_graph_def.SerializeToString())
+        self.logger.info("Optimized frozen pb saved to %s" % ckptpath)
 
 
 def main(*args):
     t = Trainer(*args)
     t.fit()
+    t.export_best()
 
 
 if __name__ == "__main__":
@@ -238,7 +263,7 @@ if __name__ == "__main__":
     import logging
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_folder", type=str, default="datasets")
-    parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--input_size", type=int, default=224)
     parser.add_argument("--valset_ratio", type=float, default=.1)
     parser.add_argument("--epochs", type=int, default=90)

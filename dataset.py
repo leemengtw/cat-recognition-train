@@ -16,7 +16,7 @@ class Dataset():
             folder,
             train=True,
             size=(224, 224),
-            batch_size=8,
+            batch_size=64,
             shuffle_buffer=None,
             valratio=0.1,
             random_seed=0):
@@ -142,7 +142,7 @@ def _test():
             print(e, i, end='\033[K\r')
     try:
         while True:
-            _, _ = sess.run(next_item)
+            sess.run(next_item)
             assert False, \
                 "Code here should not be runned; dataset not gone through"
     except tf.errors.OutOfRangeError:

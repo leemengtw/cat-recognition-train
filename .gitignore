@@ -124,3 +124,5 @@ runs/
 
 # tensorflow checkpoints
 ckpts/
+tmp/
+frozen_graphs/
