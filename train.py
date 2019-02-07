@@ -37,7 +37,7 @@ class Trainer():
             input_size=224,
             valset_ratio=.1,
             epochs=60,
-            net_width_mult=1.0,
+            alpha=1.0,
             optim="adam",
             init_lr=1e-3,
             optim_args=[.9, .999, 1e-8],
@@ -64,13 +64,14 @@ class Trainer():
         self.exported = False
         self.best_acc, self.best_avg_val_loss = 0., float("inf")
         self.epoch = 1
+        self.alpha = alpha
         subdir = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
         self.logdir = os.path.join(logdir, subdir)
         self.savedir = os.path.join(savedir, subdir)
         if restore is not None:
             self.logger.info("Restoring training progress from %s..." % restore)
             with open(os.path.join(restore, "config.pkl"), "rb") as f:
-                (data_folder, batch_size, input_size, valset_ratio, epochs, net_width_mult,
+                (data_folder, batch_size, input_size, valset_ratio, epochs, self.alpha,
                  optim, init_lr, optim_args, lr_decay_step, lr_decay_rate, self.logdir,
                  self.savedir, random_seed) = pickle.load(f)
             with open(os.path.join(restore, "current_status.txt"), "r") as f:
@@ -90,7 +91,7 @@ class Trainer():
                 f.write("%s\n" % subdir)
             with open(os.path.join(self.savedir, "config.pkl"), "wb") as f:
                 pickle.dump(
-                    (data_folder, batch_size, input_size, valset_ratio, epochs, net_width_mult,
+                    (data_folder, batch_size, input_size, valset_ratio, epochs, self.alpha,
                      optim, init_lr, optim_args, lr_decay_step, lr_decay_rate, self.logdir,
                      self.savedir, random_seed),
                     f)
@@ -121,9 +122,9 @@ class Trainer():
         self.logger.info("Generating training operations...")
         x, y = self.trainset.get_next()
         self._build_train_graph(
-            x, y, net_width_mult, optim, lr_bnds, lr_vals, optim_args, init_param)
+            x, y, optim, lr_bnds, lr_vals, optim_args, init_param)
         self.logger.info("Generating validation operations...")
-        self._build_val_graph(x, y, net_width_mult)
+        self._build_val_graph(x, y)
         self.sess = tf.Session()
         self.sum_writer = tf.summary.FileWriter(self.logdir, self.sess.graph)
         self.sess.run(tf.global_variables_initializer())
@@ -142,9 +143,10 @@ class Trainer():
                     "No optimizer ckpt file found in %s; not loading optim params" % restore)
 
     def _build_train_graph(
-            self, x, y, alpha, optim, bnds, vals, optim_args, init_param=None):
+            self, x, y, optim, bnds, vals, optim_args, init_param=None):
         self.train_net = Net(
-            x, alpha=alpha, input_size=(self.input_size, self.input_size), init_param=init_param)
+            x, alpha=self.alpha, input_size=(self.input_size, self.input_size),
+            init_param=init_param)
         loss, self.train_accum_loss, self.train_avg_loss, self.train_reset_loss = \
             self._build_loss_graph(self.train_net.out, y, "train")
         self.global_step = tf.placeholder(tf.int32)
@@ -156,9 +158,9 @@ class Trainer():
         self.optim_saver = tf.train.Saver(self.optim_vars)
         self.train_summary = tf.summary.scalar("training loss", self.train_avg_loss)
 
-    def _build_val_graph(self, x, y, alpha):
+    def _build_val_graph(self, x, y):
         self.val_net = Net(
-            x, alpha=alpha, input_size=(self.input_size, self.input_size), reuse=True)
+            x, alpha=self.alpha, input_size=(self.input_size, self.input_size), reuse=True)
         cur_currect = tf.reduce_sum(
             tf.cast(tf.equal(tf.cast(self.val_net.out > 0, tf.int32), y), tf.int32))
         total_correct = tf.get_variable("total_correct", None, tf.int32, tf.constant(0))
@@ -261,7 +263,8 @@ class Trainer():
         self.sess.close()
         tf.reset_default_graph()
         x = tf.placeholder(tf.float32, [None, self.input_size, self.input_size, 3], name="x")
-        net = Net(x, input_size=(self.input_size, self.input_size), inference_only=True)
+        net = Net(x, alpha=self.alpha, input_size=(self.input_size, self.input_size),
+                  inference_only=True)
         self.sess = tf.Session(graph=tf.get_default_graph())
         net.load(self.sess, self.savedir, ckptname)
         npypath = os.path.join(self.savedir, "%s.pkl" % ckptname)
@@ -279,6 +282,10 @@ class Trainer():
         with tf.gfile.GFile(ckptpath, 'wb') as f:
             f.write(out_graph_def.SerializeToString())
         self.logger.info("Optimized frozen pb saved to %s" % ckptpath)
+        node_name_path = os.path.join(self.savedir, "node_name.txt")
+        if not os.path.exists(os.path.join(node_name_path)):
+            with open(node_name_path, "w") as f:
+                f.write("%s\n%s" % ("x", net.out.op.name))
 
 
 def main(*args):
@@ -297,7 +304,7 @@ if __name__ == "__main__":
     parser.add_argument("--input_size", type=int, default=224)
     parser.add_argument("--valset_ratio", type=float, default=.1)
     parser.add_argument("--epochs", type=int, default=60)
-    parser.add_argument("--net_width_mult", type=float, default=1.0,
+    parser.add_argument("--alpha", type=float, default=1.0,
                         choices=[0.5, 1.0])
     parser.add_argument("--init_lr", type=float, default=1e-3)
     parser.add_argument("--optim", type=str, default="adam",
@@ -349,6 +356,6 @@ if __name__ == "__main__":
     optim_args = [args.optim_arg1, args.optim_arg2, args.optim_arg3]
     main(
         args.data_folder, args.batch_size, args.input_size, args.valset_ratio, args.epochs,
-        args.net_width_mult, args.optim, args.init_lr, optim_args, args.lr_decay_step,
+        args.alpha, args.optim, args.init_lr, optim_args, args.lr_decay_step,
         args.lr_decay_rate, args.init_param, args.logdir, args.savedir, args.random_seed,
         logger, not args.not_show_progress_bar, args.restore, args.debug)
