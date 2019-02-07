@@ -17,6 +17,17 @@ def _tqdm(res):
     return res
 
 
+__optimizers__ = {
+    "adadelta": lambda lr, arg1, arg2, arg3=None: tf.train.AdadeltaOptimizer(lr, arg1, arg2),
+    "adagrad": lambda lr, arg1, arg2=None, arg3=None: tf.train.AdagradOptimizer(lr, arg1),
+    "adam": lambda lr, arg1, arg2, arg3: tf.train.AdamOptimizer(lr, arg1, arg2, arg3),
+    "nadam": lambda lr, arg1, arg2, arg3: tf.contrib.opt.NadamOptimizer(lr, arg1, arg2, arg3),
+    "rmsprop": lambda lr, arg1, arg2, arg3: tf.train.RMSPropOptimizer(lr, arg1, arg2, arg3),
+    "sgd": lambda lr, arg1, arg2, arg3=None: tf.train.MomentumOptimizer(
+                                             lr, arg1, use_nesterov=arg3)
+}
+
+
 class Trainer():
 
     def __init__(
@@ -26,14 +37,19 @@ class Trainer():
             input_size=224,
             valset_ratio=.1,
             epochs=90,
+            optimizer="adam",
             init_lr=1e-3,
+            optim_args=[.9, .999, 1e-8],
             init_params=None,
             logdir="runs",
             savedir="ckpts",
             random_seed=0,
             logger=None,
             show_progress=True,
-            restore=None):
+            restore=None,
+            debug=False):
+        if optimizer == "sgd":
+            optim_args[2] = optim_args[2] >= 1.
         if logger is not None:
             self.logger = logger
         else:
@@ -43,7 +59,7 @@ class Trainer():
             self.logger.warning("You are using the root logger, which has bad a format.")
             self.logger.warning("Please consider passing a better logger.")
         self.exported = False
-        self.best_avg_val_loss, self.best_acc = float("inf"), 0.
+        self.best_acc, self.best_avg_val_loss = 0., float("inf")
         self.epoch = 1
         subdir = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
         self.logdir = os.path.join(logdir, subdir)
@@ -51,11 +67,12 @@ class Trainer():
         if restore is not None:
             self.logger.info("Restoring training progress from %s..." % restore)
             with open(os.path.join(restore, "config.pkl"), "rb") as f:
-                (data_folder, batch_size, input_size, valset_ratio,
-                 epochs, self.best_avg_val_loss, self.best_acc,
-                 self.logdir, self.savedir, random_seed) = pickle.load(f)
-            with open(os.path.join(restore, "current_epoch.txt"), "r") as f:
-                self.epoch = int(f.read())
+                (data_folder, batch_size, input_size, valset_ratio, epochs, optimizer,
+                 init_lr, optim_args, self.logdir, self.savedir, random_seed) = pickle.load(f)
+            with open(os.path.join(restore, "current_status.txt"), "r") as f:
+                self.epoch, self.best_acc, self.best_avg_val_loss = f.read().splitlines()
+                self.epoch, self.best_acc, self.best_avg_val_loss = \
+                    int(self.epoch), float(self.best_acc), float(self.best_avg_val_loss)
             if os.path.exists(os.path.join(restore, "net_latest.meta")) and\
                     (init_params is not None):
                 self.logger.warning(
@@ -65,16 +82,15 @@ class Trainer():
         else:
             if not os.path.isdir(self.savedir):
                 os.makedirs(self.savedir)
-            with open(os.path.join(savedir, "history"), "a") as fp:
-                fp.write("%s\n" % subdir)
+            with open(os.path.join(savedir, "history"), "a") as f:
+                f.write("%s\n" % subdir)
             with open(os.path.join(self.savedir, "config.pkl"), "wb") as f:
                 pickle.dump(
-                    (data_folder, batch_size, input_size, valset_ratio,
-                     epochs, self.best_avg_val_loss, self.best_acc,
-                     self.logdir, self.savedir, random_seed),
+                    (data_folder, batch_size, input_size, valset_ratio, epochs, optimizer,
+                     init_lr, optim_args, self.logdir, self.savedir, random_seed),
                     f)
-            with open(os.path.join(self.savedir, "current_epoch.txt"), "w") as f:
-                f.write(str(self.epoch))
+            with open(os.path.join(self.savedir, "current_status.txt"), "w") as f:
+                f.write("%d\n%f\n%f" % (self.epoch, self.best_acc, self.best_avg_val_loss))
         if not show_progress or __no_tqdm__:
             self.tqdm = _tqdm
         else:
@@ -90,14 +106,14 @@ class Trainer():
         self.logger.info("Preparing dataset...")
         self.trainset = Dataset(
             data_folder, True, (input_size, input_size),
-            batch_size, None, valset_ratio, random_seed)
+            batch_size, None, valset_ratio, random_seed, debug)
         self.input_size = input_size
         self.logger.debug("%d training instances, %d validation instances" % (
             self.trainset.train_length, self.trainset.val_length))
         self.total_pred = tf.constant(self.trainset.val_length, name="total_pred")
         self.logger.info("Generating training operations...")
         x, y = self.trainset.get_next()
-        self._build_train_graph(x, y, init_lr, init_params)
+        self._build_train_graph(x, y, optimizer, init_lr, optim_args, init_params)
         self.logger.info("Generating validation operations...")
         self._build_val_graph(x, y)
         self.sess = tf.Session()
@@ -117,29 +133,28 @@ class Trainer():
                 self.logger.warning(
                     "No optimizer ckpt file found in %s; not loading optim params" % restore)
 
-    def _build_train_graph(self, train_x, train_y, init_lr, init_params=None):
+    def _build_train_graph(self, x, y, optimizer, init_lr, optim_args, init_params=None):
         self.train_net = Net(
-            train_x, input_size=(self.input_size, self.input_size), init_params=init_params)
+            x, input_size=(self.input_size, self.input_size), init_params=init_params)
         loss, self.train_accum_loss, self.train_avg_loss, self.train_reset_loss = \
-            self._build_loss_graph(self.train_net.out, train_y, "train")
+            self._build_loss_graph(self.train_net.out, y, "train")
         with tf.variable_scope("optim_vars"):
-            self.train_op = tf.train.AdamOptimizer(
-                    learning_rate=init_lr).minimize(loss)
+            self.train_op = __optimizers__[optimizer](init_lr, *optim_args).minimize(loss)
         self.optim_vars = [
             v for v in tf.global_variables() if v.name.startswith("optim_vars")]
         self.optim_saver = tf.train.Saver(self.optim_vars)
         self.train_summary = tf.summary.scalar("training loss", self.train_avg_loss)
 
-    def _build_val_graph(self, val_x, val_y):
-        self.val_net = Net(val_x, input_size=(self.input_size, self.input_size), reuse=True)
+    def _build_val_graph(self, x, y):
+        self.val_net = Net(x, input_size=(self.input_size, self.input_size), reuse=True)
         cur_currect = tf.reduce_sum(
-            tf.cast(tf.equal(tf.cast(self.val_net.out > 0, tf.int32), val_y), tf.int32))
+            tf.cast(tf.equal(tf.cast(self.val_net.out > 0, tf.int32), y), tf.int32))
         total_correct = tf.get_variable("total_correct", None, tf.int32, tf.constant(0))
         self.accum_correct = tf.assign(total_correct, total_correct + cur_currect)
         self.reset_correct = tf.assign(total_correct, 0)
         self.accuracy = total_correct / self.total_pred
         _, self.val_accum_loss, self.val_avg_loss, self.val_reset_loss = \
-            self._build_loss_graph(self.val_net.out, val_y, "val")
+            self._build_loss_graph(self.val_net.out, y, "val")
         self.val_summary = tf.summary.merge([
             tf.summary.scalar("validation loss", self.val_avg_loss),
             tf.summary.scalar("validation accuracy", self.accuracy)])
@@ -159,9 +174,10 @@ class Trainer():
 
     def eval(self, epoch, save=True):
         if self.exported:
-            raise Exception("%s %s" % (
-                    "Model exported and all graphs are reset; ",
+            self.logger.error((
+                    "Model exported and all graphs are reset; "
                     "please reinitialize the trainer if you want to evaluate the model."))
+            raise Exception("Model exported and the graph reset.")
         self.trainset.initialize(self.sess, False)  # inits valset inside trainset
         for _ in self.tqdm(range(len(self.trainset)), desc="[Epoch %d Evaluation]" % epoch):
             self.sess.run(
@@ -185,9 +201,10 @@ class Trainer():
 
     def summarize(self, epoch):
         if self.exported:
-            raise Exception("%s %s" % (
-                    "Model exported and all graphs are reset;",
+            self.logger.error((
+                    "Model exported and all graphs are reset; "
                     "please reinitialize the trainer if you want to summarize the model."))
+            raise Exception("Model exported and the graph reset.")
         avg_loss, cur_summary = self.sess.run([self.train_avg_loss, self.train_summary])
         self.sum_writer.add_summary(cur_summary, epoch)
         self.logger.info(
@@ -196,16 +213,17 @@ class Trainer():
         self.sess.run(self.train_reset_loss)
         self.train_net.save(self.sess, self.savedir, "net_latest")
         self.optim_saver.save(self.sess, os.path.join(self.savedir, "optim_latest"))
-        with open(os.path.join(self.savedir, "current_epoch.txt"), "w") as f:
-            f.write(str(epoch + 1))
+        with open(os.path.join(self.savedir, "current_status.txt"), "w") as f:
+            f.write("%d\n%f\n%f" % (epoch + 1, self.best_acc, self.best_avg_val_loss))
         self.logger.info(
             "Epoch %d done and all ckpts and progress saved to %s" % (epoch, self.savedir))
 
     def fit(self):
         if self.exported:
-            raise Exception("%s %s" % (
-                    "Model exported and all graphs are reset; ",
+            self.logger.error((
+                    "Model exported and all graphs are reset; "
                     "please reinitialize the trainer if you want to continue training."))
+            raise Exception("Model exported and the graph reset.")
         self.logger.info("Starts training...")
         for epoch in range(self.epoch, self.epochs + 1):
             self.trainset.initialize(self.sess, True)
@@ -222,7 +240,6 @@ class Trainer():
         self.export("net_best_acc")
         self.export("net_best_loss")
 
-    # TODO: finish this!
     def export(self, ckptname):
         self.logger.warning("%s %s" % (
             "Exporting model leads to graph reset;",
@@ -266,8 +283,18 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--input_size", type=int, default=224)
     parser.add_argument("--valset_ratio", type=float, default=.1)
-    parser.add_argument("--epochs", type=int, default=90)
+    parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--init_lr", type=float, default=1e-3)
+    parser.add_argument("--optimizer", type=str, default="adam",
+                        choices=list(__optimizers__.keys()))
+    parser.add_argument("--optim_arg1", type=float, default=.9)
+    parser.add_argument("--optim_arg2", type=float, default=.999)
+    parser.add_argument("--optim_arg3", type=float, default=1e-8,
+                        help=(
+                            "Note that if you're using sgd optimizer, "
+                            "and you're passing this arg greater-equal than 1, "
+                            "you're using Nesterov momentum."
+                        ))
     parser.add_argument(
         "--init_params", type=str, default="imagenet_pretrained_shufflenetv2_1.0.pkl")
     parser.add_argument("--logdir", type=str, default="runs")
@@ -279,6 +306,7 @@ if __name__ == "__main__":
     parser.add_argument("--restore", type=str, default=None)
     parser.add_argument("--show_tf_cpp_log", action="store_true")
     parser.add_argument("--not_show_progress_bar", action="store_true")
+    parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
     if not args.show_tf_cpp_log:
@@ -301,7 +329,8 @@ if __name__ == "__main__":
         fhandler = logging.StreamHandler(open(args.logger_out_file, "a"))
         fhandler.setFormatter(formatter)
         logger.addHandler(fhandler)
+    optim_args = [args.optim_arg1, args.optim_arg2, args.optim_arg3]
     main(
-        args.data_folder, args.batch_size, args.input_size, args.valset_ratio,
-        args.epochs, args.init_lr, args.init_params, args.logdir,
-        args.savedir, args.random_seed, logger, not args.not_show_progress_bar, args.restore)
+        args.data_folder, args.batch_size, args.input_size, args.valset_ratio, args.epochs,
+        args.optimizer, args.init_lr, optim_args, args.init_params, args.logdir, args.savedir,
+        args.random_seed, logger, not args.not_show_progress_bar, args.restore, args.debug)

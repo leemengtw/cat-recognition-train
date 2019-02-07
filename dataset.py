@@ -19,12 +19,17 @@ class Dataset():
             batch_size=64,
             shuffle_buffer=None,
             valratio=0.1,
-            random_seed=0):
+            random_seed=0,
+            debug=False):
         random.seed(random_seed)
         self.train = train
         self.size = size
         self.root = os.path.join(folder, "train" if train else "test1")
-        paths = sorted(glob(os.path.join(self.root, "*.jpg")))
+        if debug:
+            paths = ["datasets/train/%s.%d.jpg" % (s, i) for s in ("dog", "cat")
+                     for i in range(10)]
+        else:
+            paths = sorted(glob(os.path.join(self.root, "*.jpg")))
         self.val = False
         self.initialized = False
 
