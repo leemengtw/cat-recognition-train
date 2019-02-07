@@ -106,7 +106,7 @@ class Trainer():
         tf.set_random_seed(random_seed)
         self.epochs = epochs
         self.logger.info("Model checkpoints will be saved to %s" % self.savedir)
-        self.logger.info("Summary for TensorBaord will be saved to %s" % self.logdir)
+        self.logger.info("Summary for TensorBoard will be saved to %s" % self.logdir)
         self.logger.info(
             "You can use \"tensorboard --logdir %s\" to see all training summaries." % logdir)
         # logdir: folder containing all training histories
