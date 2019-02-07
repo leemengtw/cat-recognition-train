@@ -129,33 +129,3 @@ class Dataset():
 
     def get_next(self):
         return self.iterator.get_next()
-
-
-def _test():
-    epochs = 2
-    is_train = True
-    is_val = False
-    d = Dataset("datasets", train=is_train)
-    sess = tf.Session()
-    import time
-    t = time.time()
-    next_item = d.get_next()
-    for e in range(1, epochs + 1):
-        d.initialize(sess, not is_val)
-        for i in range(1, len(d) + 1):
-            v, k = sess.run(next_item)
-            print(e, i, end='\033[K\r')
-    try:
-        while True:
-            sess.run(next_item)
-            assert False, \
-                "Code here should not be runned; dataset not gone through"
-    except tf.errors.OutOfRangeError:
-        print("YAY\033[K")
-    except Exception as exp:
-        print(exp)
-    print("\n%f sec elapsed." % (time.time() - t))
-
-
-if __name__ == "__main__":
-    _test()
