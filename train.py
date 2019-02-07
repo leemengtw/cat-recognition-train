@@ -35,9 +35,9 @@ class Trainer():
             data_folder="dataset",
             batch_size=64,
             input_size=224,
-            valset_ratio=.1,
+            valset_ratio=.2,
             epochs=60,
-            alpha=1.0,
+            alpha=0.5,
             optim="adam",
             init_lr=1e-3,
             optim_args=[.9, .999, 1e-8],
@@ -302,9 +302,9 @@ if __name__ == "__main__":
     parser.add_argument("--data_folder", type=str, default="datasets")
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--input_size", type=int, default=224)
-    parser.add_argument("--valset_ratio", type=float, default=.1)
+    parser.add_argument("--valset_ratio", type=float, default=.2)
     parser.add_argument("--epochs", type=int, default=60)
-    parser.add_argument("--alpha", type=float, default=1.0,
+    parser.add_argument("--alpha", type=float, default=0.5,
                         choices=[0.5, 1.0])
     parser.add_argument("--init_lr", type=float, default=1e-3)
     parser.add_argument("--optim", type=str, default="adam",
@@ -320,7 +320,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr_decay_step", type=int, default=20)
     parser.add_argument("--lr_decay_rate", type=float, default=.1)
     parser.add_argument(
-        "--init_param", type=str, default="imagenet_pretrained_shufflenetv2_1.0.pkl")
+        "--init_param", type=str, default="imagenet_pretrained_shufflenetv2_0.5.pkl")
     parser.add_argument("--logdir", type=str, default="runs")
     parser.add_argument("--savedir", type=str, default="ckpts")
     parser.add_argument("--random_seed", type=int, default=0)

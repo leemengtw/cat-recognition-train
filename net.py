@@ -183,7 +183,7 @@ class Net():
 
     # FIXME: reuse for validation!
     def __init__(
-            self, x, cls=2, alpha=1., input_size=(224, 224),
+            self, x, cls=2, alpha=.5, input_size=(224, 224),
             inference_only=False, init_param=None, reuse=False, test_convert=False):
         # init_parmas is used when loading weight pretrained on other dataset(s), normally
         # imagenet, so the weights from the last fully connect layer should not be loaded

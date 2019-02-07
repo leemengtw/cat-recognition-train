@@ -18,7 +18,7 @@ class Dataset():
             size=(224, 224),
             batch_size=64,
             shuffle_buffer=None,
-            valratio=0.1,
+            valratio=0.2,
             random_seed=0,
             debug=False):
         random.seed(random_seed)
