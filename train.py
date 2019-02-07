@@ -37,12 +37,13 @@ class Trainer():
             input_size=224,
             valset_ratio=.1,
             epochs=60,
-            optimizer="adam",
+            net_width_mult=1.0,
+            optim="adam",
             init_lr=1e-3,
             optim_args=[.9, .999, 1e-8],
             lr_decay_step=20,
             lr_decay_rate=.1,
-            init_params=None,
+            init_param=None,
             logdir="runs",
             savedir="ckpts",
             random_seed=0,
@@ -50,7 +51,7 @@ class Trainer():
             show_progress=True,
             restore=None,
             debug=False):
-        if optimizer == "sgd":
+        if optim == "sgd":
             optim_args[2] = optim_args[2] >= 1.
         if logger is not None:
             self.logger = logger
@@ -69,19 +70,19 @@ class Trainer():
         if restore is not None:
             self.logger.info("Restoring training progress from %s..." % restore)
             with open(os.path.join(restore, "config.pkl"), "rb") as f:
-                (data_folder, batch_size, input_size, valset_ratio, epochs, optimizer,
-                 init_lr, optim_args, lr_decay_step, lr_decay_rate, self.logdir,
+                (data_folder, batch_size, input_size, valset_ratio, epochs, net_width_mult,
+                 optim, init_lr, optim_args, lr_decay_step, lr_decay_rate, self.logdir,
                  self.savedir, random_seed) = pickle.load(f)
             with open(os.path.join(restore, "current_status.txt"), "r") as f:
                 self.epoch, self.best_acc, self.best_avg_val_loss = f.read().splitlines()
                 self.epoch, self.best_acc, self.best_avg_val_loss = \
                     int(self.epoch), float(self.best_acc), float(self.best_avg_val_loss)
             if os.path.exists(os.path.join(restore, "net_latest.meta")) and\
-                    (init_params is not None):
+                    (init_param is not None):
                 self.logger.warning(
                     "Checkpoint in %s exists; not initializing params from %s" % (
-                        restore, init_params))
-                init_params = None
+                        restore, init_param))
+                init_param = None
         else:
             if not os.path.isdir(self.savedir):
                 os.makedirs(self.savedir)
@@ -89,8 +90,8 @@ class Trainer():
                 f.write("%s\n" % subdir)
             with open(os.path.join(self.savedir, "config.pkl"), "wb") as f:
                 pickle.dump(
-                    (data_folder, batch_size, input_size, valset_ratio, epochs, optimizer,
-                     init_lr, optim_args, lr_decay_step, lr_decay_rate, self.logdir,
+                    (data_folder, batch_size, input_size, valset_ratio, epochs, net_width_mult,
+                     optim, init_lr, optim_args, lr_decay_step, lr_decay_rate, self.logdir,
                      self.savedir, random_seed),
                     f)
             with open(os.path.join(self.savedir, "current_status.txt"), "w") as f:
@@ -119,9 +120,10 @@ class Trainer():
         self.total_pred = tf.constant(self.trainset.val_length, name="total_pred")
         self.logger.info("Generating training operations...")
         x, y = self.trainset.get_next()
-        self._build_train_graph(x, y, optimizer, lr_bnds, lr_vals, optim_args, init_params)
+        self._build_train_graph(
+            x, y, net_width_mult, optim, lr_bnds, lr_vals, optim_args, init_param)
         self.logger.info("Generating validation operations...")
-        self._build_val_graph(x, y)
+        self._build_val_graph(x, y, net_width_mult)
         self.sess = tf.Session()
         self.sum_writer = tf.summary.FileWriter(self.logdir, self.sess.graph)
         self.sess.run(tf.global_variables_initializer())
@@ -139,22 +141,24 @@ class Trainer():
                 self.logger.warning(
                     "No optimizer ckpt file found in %s; not loading optim params" % restore)
 
-    def _build_train_graph(self, x, y, optimizer, bnds, vals, optim_args, init_params=None):
+    def _build_train_graph(
+            self, x, y, alpha, optim, bnds, vals, optim_args, init_param=None):
         self.train_net = Net(
-            x, input_size=(self.input_size, self.input_size), init_params=init_params)
+            x, alpha=alpha, input_size=(self.input_size, self.input_size), init_param=init_param)
         loss, self.train_accum_loss, self.train_avg_loss, self.train_reset_loss = \
             self._build_loss_graph(self.train_net.out, y, "train")
         self.global_step = tf.placeholder(tf.int32)
         self.lr = tf.train.piecewise_constant(self.global_step, bnds, vals)
         with tf.variable_scope("optim_vars"):
-            self.train_op = __optimizers__[optimizer](self.lr, *optim_args).minimize(loss)
+            self.train_op = __optimizers__[optim](self.lr, *optim_args).minimize(loss)
         self.optim_vars = [
             v for v in tf.global_variables() if v.name.startswith("optim_vars")]
         self.optim_saver = tf.train.Saver(self.optim_vars)
         self.train_summary = tf.summary.scalar("training loss", self.train_avg_loss)
 
-    def _build_val_graph(self, x, y):
-        self.val_net = Net(x, input_size=(self.input_size, self.input_size), reuse=True)
+    def _build_val_graph(self, x, y, alpha):
+        self.val_net = Net(
+            x, alpha=alpha, input_size=(self.input_size, self.input_size), reuse=True)
         cur_currect = tf.reduce_sum(
             tf.cast(tf.equal(tf.cast(self.val_net.out > 0, tf.int32), y), tf.int32))
         total_correct = tf.get_variable("total_correct", None, tf.int32, tf.constant(0))
@@ -293,8 +297,10 @@ if __name__ == "__main__":
     parser.add_argument("--input_size", type=int, default=224)
     parser.add_argument("--valset_ratio", type=float, default=.1)
     parser.add_argument("--epochs", type=int, default=60)
+    parser.add_argument("--net_width_mult", type=float, default=1.0,
+                        choices=[0.5, 1.0])
     parser.add_argument("--init_lr", type=float, default=1e-3)
-    parser.add_argument("--optimizer", type=str, default="adam",
+    parser.add_argument("--optim", type=str, default="adam",
                         choices=list(__optimizers__.keys()))
     parser.add_argument("--optim_arg1", type=float, default=.9)
     parser.add_argument("--optim_arg2", type=float, default=.999)
@@ -307,7 +313,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr_decay_step", type=int, default=20)
     parser.add_argument("--lr_decay_rate", type=float, default=.1)
     parser.add_argument(
-        "--init_params", type=str, default="imagenet_pretrained_shufflenetv2_1.0.pkl")
+        "--init_param", type=str, default="imagenet_pretrained_shufflenetv2_1.0.pkl")
     parser.add_argument("--logdir", type=str, default="runs")
     parser.add_argument("--savedir", type=str, default="ckpts")
     parser.add_argument("--random_seed", type=int, default=0)
@@ -343,6 +349,6 @@ if __name__ == "__main__":
     optim_args = [args.optim_arg1, args.optim_arg2, args.optim_arg3]
     main(
         args.data_folder, args.batch_size, args.input_size, args.valset_ratio, args.epochs,
-        args.optimizer, args.init_lr, optim_args, args.lr_decay_step, args.lr_decay_rate,
-        args.init_params, args.logdir, args.savedir, args.random_seed, logger,
-        not args.not_show_progress_bar, args.restore, args.debug)
+        args.net_width_mult, args.optim, args.init_lr, optim_args, args.lr_decay_step,
+        args.lr_decay_rate, args.init_param, args.logdir, args.savedir, args.random_seed,
+        logger, not args.not_show_progress_bar, args.restore, args.debug)

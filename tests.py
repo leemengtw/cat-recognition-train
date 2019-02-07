@@ -136,7 +136,9 @@ def tf_saver_test():
     logging.warning("Test functions do tf.reset_default_graph()!")
     tf.reset_default_graph()
     shape = [2, 224, 224, 3]
-    directory = "ckpts"
+    directory = os.path.join("tmp", "ckpts")
+    if not os.path.isdir(directory):
+        os.makedirs(directory)
     a = tf.placeholder(tf.float32, shape=[None, *shape[1:]])
     nx = (np.random.rand(*shape) * 10 - 5).astype(np.float32)
     net = Net(a, inference_only=False)

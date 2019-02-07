@@ -114,7 +114,7 @@ def channel_shuffle(x, groups, module_cnt):
 
 def shufflenet_unit(
         x, in_c, is_training, module_cnt,
-        inference_only, out_c=None, init_params=None):
+        inference_only, out_c=None, init_param=None):
     with tf.variable_scope("shufflenet_unit_%02d" % module_cnt):
         if out_c:  # Downsample and double (or more) the channels
             assert out_c >= in_c * 2
@@ -123,35 +123,35 @@ def shufflenet_unit(
             # 1st branch
             x1 = dwise_conv(
                 x1, in_c, 3, 2, 0, False, 1, 1,
-                init_params[0] if init_params else None)
+                init_param[0] if init_param else None)
             x1 = batch_norm(
                 x1, in_c, is_training, 1, inference_only, 1e-5, .9,
-                *init_params[1:5] if init_params else [None])
+                *init_param[1:5] if init_param else [None])
             x1 = conv(
                 x1, in_c, chs, 1, 1, 2, False, 0,
-                init_params[5] if init_params else None)
+                init_param[5] if init_param else None)
             x1 = batch_norm(
                 x1, chs, is_training, 3, inference_only, 1e-5, .9,
-                *init_params[6:10] if init_params else [None])
+                *init_param[6:10] if init_param else [None])
             # 2nd branch
             x2 = conv(
                 x2, in_c, chs, 1, 1, 4, False, 0,
-                init_params[10] if init_params else None)
+                init_param[10] if init_param else None)
             x2 = tf.nn.relu(batch_norm(
                 x2, chs, is_training, 5, inference_only, 1e-5, .9,
-                *init_params[11:15] if init_params else [None]))
+                *init_param[11:15] if init_param else [None]))
             x2 = dwise_conv(
                 x2, chs, 3, 2, 6, False, 1, 1,
-                init_params[15] if init_params else None)
+                init_param[15] if init_param else None)
             x2 = batch_norm(
                 x2, chs, is_training, 7, inference_only, 1e-5, .9,
-                *init_params[16:20] if init_params else [None])
+                *init_param[16:20] if init_param else [None])
             x2 = conv(
                 x2, chs, chs, 1, 1, 8, False, 0,
-                init_params[20] if init_params else None)
+                init_param[20] if init_param else None)
             x2 = batch_norm(
                 x2, chs, is_training, 9, inference_only, 1e-5, .9,
-                *init_params[21:25] if init_params else [None])
+                *init_param[21:25] if init_param else [None])
             x = tf.nn.relu(tf.concat([x1, x2], 3))
         else:
             assert in_c % 2 == 0
@@ -159,22 +159,22 @@ def shufflenet_unit(
             left, right = x[..., :chs], x[..., chs:]
             right = conv(
                 right, chs, chs, 1, 1, 0, False, 0,
-                init_params[0] if init_params else None)  # no bias
+                init_param[0] if init_param else None)  # no bias
             right = tf.nn.relu(batch_norm(
                 right, chs, is_training, 1, inference_only, 1e-5, .9,
-                *init_params[1:5] if init_params else [None]))
+                *init_param[1:5] if init_param else [None]))
             right = dwise_conv(
                 right, chs, 3, 1, 2, False, 1, 1,
-                init_params[5] if init_params else None)
+                init_param[5] if init_param else None)
             right = batch_norm(
                 right, chs, is_training, 3, inference_only, 1e-5, .9,
-                *init_params[6:10] if init_params else [None])
+                *init_param[6:10] if init_param else [None])
             right = conv(
                 right, chs, chs, 1, 1, 3, False, 0,
-                init_params[10] if init_params else None)  # no bias
+                init_param[10] if init_param else None)  # no bias
             right = tf.nn.relu(batch_norm(
                 right, chs, is_training, 4, inference_only, 1e-5, .9,
-                *init_params[11:15] if init_params else [None]))
+                *init_param[11:15] if init_param else [None]))
             x = tf.concat([left, right], 3)
         return channel_shuffle(x, 2, 10 if out_c else 5)
 
@@ -184,7 +184,7 @@ class Net():
     # FIXME: reuse for validation!
     def __init__(
             self, x, cls=2, alpha=1., input_size=(224, 224),
-            inference_only=False, init_params=None, reuse=False, test_convert=False):
+            inference_only=False, init_param=None, reuse=False, test_convert=False):
         # init_parmas is used when loading weight pretrained on other dataset(s), normally
         # imagenet, so the weights from the last fully connect layer should not be loaded
         assert len(input_size) == 2
@@ -214,11 +214,11 @@ class Net():
         else:
             raise ValueError("Unexpected alpha, which should be 0.5, 1.0, 1.5, or 2.0")
         self.repeats = (3, 7, 3)
-        if isinstance(init_params, str):
-            with open(init_params, "rb") as f:
-                init_params = pickle.load(f)
+        if isinstance(init_param, str):
+            with open(init_param, "rb") as f:
+                init_param = pickle.load(f)
         with tf.variable_scope(self.graph_name_prefix, reuse=reuse):
-            self.out = self.build_net(init_params)
+            self.out = self.build_net(init_param)
         self.to_save_vars = [
             v for v in tf.global_variables() if v.name.startswith(self.graph_name_prefix)]
         self.saver = tf.train.Saver(self.to_save_vars)
