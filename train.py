@@ -36,10 +36,12 @@ class Trainer():
             batch_size=64,
             input_size=224,
             valset_ratio=.1,
-            epochs=90,
+            epochs=60,
             optimizer="adam",
             init_lr=1e-3,
             optim_args=[.9, .999, 1e-8],
+            lr_decay_step=20,
+            lr_decay_rate=.1,
             init_params=None,
             logdir="runs",
             savedir="ckpts",
@@ -68,7 +70,8 @@ class Trainer():
             self.logger.info("Restoring training progress from %s..." % restore)
             with open(os.path.join(restore, "config.pkl"), "rb") as f:
                 (data_folder, batch_size, input_size, valset_ratio, epochs, optimizer,
-                 init_lr, optim_args, self.logdir, self.savedir, random_seed) = pickle.load(f)
+                 init_lr, optim_args, lr_decay_step, lr_decay_rate, self.logdir,
+                 self.savedir, random_seed) = pickle.load(f)
             with open(os.path.join(restore, "current_status.txt"), "r") as f:
                 self.epoch, self.best_acc, self.best_avg_val_loss = f.read().splitlines()
                 self.epoch, self.best_acc, self.best_avg_val_loss = \
@@ -87,7 +90,8 @@ class Trainer():
             with open(os.path.join(self.savedir, "config.pkl"), "wb") as f:
                 pickle.dump(
                     (data_folder, batch_size, input_size, valset_ratio, epochs, optimizer,
-                     init_lr, optim_args, self.logdir, self.savedir, random_seed),
+                     init_lr, optim_args, lr_decay_step, lr_decay_rate, self.logdir,
+                     self.savedir, random_seed),
                     f)
             with open(os.path.join(self.savedir, "current_status.txt"), "w") as f:
                 f.write("%d\n%f\n%f" % (self.epoch, self.best_acc, self.best_avg_val_loss))
@@ -95,6 +99,8 @@ class Trainer():
             self.tqdm = _tqdm
         else:
             self.tqdm = tqdm
+        lr_bnds = [i for i in range(lr_decay_step, epochs, lr_decay_step)]
+        lr_vals = [init_lr * lr_decay_rate ** i for i in range(len(lr_bnds) + 1)]
         tf.set_random_seed(random_seed)
         self.epochs = epochs
         self.logger.info("Model checkpoints will be saved to %s" % self.savedir)
@@ -113,7 +119,7 @@ class Trainer():
         self.total_pred = tf.constant(self.trainset.val_length, name="total_pred")
         self.logger.info("Generating training operations...")
         x, y = self.trainset.get_next()
-        self._build_train_graph(x, y, optimizer, init_lr, optim_args, init_params)
+        self._build_train_graph(x, y, optimizer, lr_bnds, lr_vals, optim_args, init_params)
         self.logger.info("Generating validation operations...")
         self._build_val_graph(x, y)
         self.sess = tf.Session()
@@ -133,13 +139,15 @@ class Trainer():
                 self.logger.warning(
                     "No optimizer ckpt file found in %s; not loading optim params" % restore)
 
-    def _build_train_graph(self, x, y, optimizer, init_lr, optim_args, init_params=None):
+    def _build_train_graph(self, x, y, optimizer, bnds, vals, optim_args, init_params=None):
         self.train_net = Net(
             x, input_size=(self.input_size, self.input_size), init_params=init_params)
         loss, self.train_accum_loss, self.train_avg_loss, self.train_reset_loss = \
             self._build_loss_graph(self.train_net.out, y, "train")
+        self.global_step = tf.placeholder(tf.int32)
+        self.lr = tf.train.piecewise_constant(self.global_step, bnds, vals)
         with tf.variable_scope("optim_vars"):
-            self.train_op = __optimizers__[optimizer](init_lr, *optim_args).minimize(loss)
+            self.train_op = __optimizers__[optimizer](self.lr, *optim_args).minimize(loss)
         self.optim_vars = [
             v for v in tf.global_variables() if v.name.startswith("optim_vars")]
         self.optim_saver = tf.train.Saver(self.optim_vars)
@@ -230,8 +238,9 @@ class Trainer():
             self.logger.info("Epoch %d begins..." % epoch)
             for _ in self.tqdm(range(1, len(self.trainset) + 1),
                                desc="[Epoch %d/%d]" % (epoch, self.epochs)):
-                self.sess.run([
-                    self.train_accum_loss, self.train_op], {self.train_net.is_training: True})
+                self.sess.run([self.lr, self.train_accum_loss, self.train_op], {
+                    self.train_net.is_training: True,
+                    self.global_step: epoch})
             self.summarize(epoch)
         self.logger.info("Model fitting done.")
 
@@ -283,7 +292,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--input_size", type=int, default=224)
     parser.add_argument("--valset_ratio", type=float, default=.1)
-    parser.add_argument("--epochs", type=int, default=2)
+    parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--init_lr", type=float, default=1e-3)
     parser.add_argument("--optimizer", type=str, default="adam",
                         choices=list(__optimizers__.keys()))
@@ -295,6 +304,8 @@ if __name__ == "__main__":
                             "and you're passing this arg greater-equal than 1, "
                             "you're using Nesterov momentum."
                         ))
+    parser.add_argument("--lr_decay_step", type=int, default=20)
+    parser.add_argument("--lr_decay_rate", type=float, default=.1)
     parser.add_argument(
         "--init_params", type=str, default="imagenet_pretrained_shufflenetv2_1.0.pkl")
     parser.add_argument("--logdir", type=str, default="runs")
@@ -332,5 +343,6 @@ if __name__ == "__main__":
     optim_args = [args.optim_arg1, args.optim_arg2, args.optim_arg3]
     main(
         args.data_folder, args.batch_size, args.input_size, args.valset_ratio, args.epochs,
-        args.optimizer, args.init_lr, optim_args, args.init_params, args.logdir, args.savedir,
-        args.random_seed, logger, not args.not_show_progress_bar, args.restore, args.debug)
+        args.optimizer, args.init_lr, optim_args, args.lr_decay_step, args.lr_decay_rate,
+        args.init_params, args.logdir, args.savedir, args.random_seed, logger,
+        not args.not_show_progress_bar, args.restore, args.debug)
