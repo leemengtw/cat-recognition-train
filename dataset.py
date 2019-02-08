@@ -74,7 +74,7 @@ class Dataset():
 
                 def _process(img, label):
                     # label = tf.cast(label, tf.float32)
-                    img = tf.image.decode_jpeg(tf.read_file(img))
+                    img = tf.image.decode_image(tf.read_file(img))
                     if is_train:
                         aug_prob = tf.random_uniform(shape=[4], minval=0., maxval=1.)
                         img = tf.image.random_flip_left_right(img)
