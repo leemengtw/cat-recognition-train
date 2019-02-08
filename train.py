@@ -1,6 +1,7 @@
 import os
 import pickle
 from datetime import datetime
+import numpy as np
 import tensorflow as tf
 from dataset import Dataset
 from net import Net
@@ -51,6 +52,7 @@ class Trainer():
             show_progress=True,
             restore=None,
             debug=False):
+        self.debug = debug
         if optim == "sgd":
             optim_args[2] = optim_args[2] >= 1.
         if logger is not None:
@@ -61,7 +63,6 @@ class Trainer():
             self.logger.setLevel(logging.info)
             self.logger.warning("You are using the root logger, which has bad a format.")
             self.logger.warning("Please consider passing a better logger.")
-        self.exported = False
         self.best_acc, self.best_avg_val_loss = 0., float("inf")
         self.epoch = 1
         self.alpha = alpha
@@ -101,8 +102,13 @@ class Trainer():
             self.tqdm = _tqdm
         else:
             self.tqdm = tqdm
-        lr_bnds = [i for i in range(lr_decay_step, epochs, lr_decay_step)]
+        if epochs > lr_decay_step:
+            lr_bnds = [i for i in range(lr_decay_step, epochs, lr_decay_step)]
+        else:
+            self.logger.warning("lr_decay_step > epochs; lr decay will not be performed.")
+            lr_bnds = []
         lr_vals = [init_lr * lr_decay_rate ** i for i in range(len(lr_bnds) + 1)]
+        self.logger.debug("LR Boundarys: %s, LR Vals: %s" % (lr_bnds, lr_vals))
         tf.set_random_seed(random_seed)
         self.epochs = epochs
         self.logger.info("Model checkpoints will be saved to %s" % self.savedir)
@@ -150,9 +156,12 @@ class Trainer():
         loss, self.train_accum_loss, self.train_avg_loss, self.train_reset_loss = \
             self._build_loss_graph(self.train_net.out, y, "train")
         self.global_step = tf.placeholder(tf.int32)
-        self.lr = tf.train.piecewise_constant(self.global_step, bnds, vals)
+        if len(bnds) > 0:
+            lr = tf.train.piecewise_constant(self.global_step, bnds, vals)
+        else:
+            lr = vals[0]
         with tf.variable_scope("optim_vars"):
-            self.train_op = __optimizers__[optim](self.lr, *optim_args).minimize(loss)
+            self.train_op = __optimizers__[optim](lr, *optim_args).minimize(loss)
         self.optim_vars = [
             v for v in tf.global_variables() if v.name.startswith("optim_vars")]
         self.optim_saver = tf.train.Saver(self.optim_vars)
@@ -187,11 +196,6 @@ class Trainer():
         return loss_mean, accum_loss, avg_loss, reset_loss
 
     def eval(self, epoch, save=True):
-        if self.exported:
-            self.logger.error((
-                    "Model exported and all graphs are reset; "
-                    "please reinitialize the trainer if you want to evaluate the model."))
-            raise Exception("Model exported and the graph reset.")
         self.trainset.initialize(self.sess, False)  # inits valset inside trainset
         for _ in self.tqdm(range(len(self.trainset)), desc="[Epoch %d Evaluation]" % epoch):
             self.sess.run(
@@ -214,11 +218,6 @@ class Trainer():
                 self.optim_saver.save(self.sess, os.path.join(self.savedir, "optim_best_loss"))
 
     def summarize(self, epoch):
-        if self.exported:
-            self.logger.error((
-                    "Model exported and all graphs are reset; "
-                    "please reinitialize the trainer if you want to summarize the model."))
-            raise Exception("Model exported and the graph reset.")
         avg_loss, cur_summary = self.sess.run([self.train_avg_loss, self.train_summary])
         self.sum_writer.add_summary(cur_summary, epoch)
         self.logger.info(
@@ -233,18 +232,13 @@ class Trainer():
             "Epoch %d done and all ckpts and progress saved to %s" % (epoch, self.savedir))
 
     def fit(self):
-        if self.exported:
-            self.logger.error((
-                    "Model exported and all graphs are reset; "
-                    "please reinitialize the trainer if you want to continue training."))
-            raise Exception("Model exported and the graph reset.")
         self.logger.info("Starts training...")
         for epoch in range(self.epoch, self.epochs + 1):
             self.trainset.initialize(self.sess, True)
             self.logger.info("Epoch %d begins..." % epoch)
             for _ in self.tqdm(range(1, len(self.trainset) + 1),
                                desc="[Epoch %d/%d]" % (epoch, self.epochs)):
-                self.sess.run([self.lr, self.train_accum_loss, self.train_op], {
+                self.sess.run([self.train_accum_loss, self.train_op], {
                     self.train_net.is_training: True,
                     self.global_step: epoch})
             self.summarize(epoch)
@@ -256,36 +250,52 @@ class Trainer():
         self.export("net_best_loss")
 
     def export(self, ckptname):
-        self.logger.warning("%s %s" % (
-            "Exporting model leads to graph reset;",
-            "Please reinitialize the trainer if you want to continue training."))
-        self.exported = True
-        self.sess.close()
-        tf.reset_default_graph()
-        x = tf.placeholder(tf.float32, [None, self.input_size, self.input_size, 3], name="x")
-        net = Net(x, alpha=self.alpha, input_size=(self.input_size, self.input_size),
-                  inference_only=True)
-        self.sess = tf.Session(graph=tf.get_default_graph())
-        net.load(self.sess, self.savedir, ckptname)
-        npypath = os.path.join(self.savedir, "%s.pkl" % ckptname)
-        net.save_to_numpy(self.sess, npypath)
-        self.logger.info("Params of list of numpy array format saved to %s" % npypath)
-        in_graph_def = tf.get_default_graph().as_graph_def()
-        out_graph_def = tf.graph_util.convert_variables_to_constants(
-            self.sess, in_graph_def, [net.out.op.name])
-        out_graph_def = TransformGraph(out_graph_def, ["x"], [net.out.op.name],
-                                       ["strip_unused_nodes",
-                                        "fold_constants(ignore_errors=true)",
-                                        "fold_batch_norms",
-                                        "fold_old_batch_norms"])
-        ckptpath = os.path.join(self.savedir, "optimized_%s.pb" % ckptname)
-        with tf.gfile.GFile(ckptpath, 'wb') as f:
-            f.write(out_graph_def.SerializeToString())
-        self.logger.info("Optimized frozen pb saved to %s" % ckptpath)
-        node_name_path = os.path.join(self.savedir, "node_name.txt")
-        if not os.path.exists(os.path.join(node_name_path)):
-            with open(node_name_path, "w") as f:
-                f.write("%s\n%s" % ("x", net.out.op.name))
+        shape = [None, self.input_size, self.input_size, 3]
+        with tf.Graph().as_default():
+            x = tf.placeholder(tf.float32, shape, name="x")
+            net = Net(x, alpha=self.alpha, input_size=(self.input_size, self.input_size),
+                      inference_only=True)
+            sess = tf.Session(graph=tf.get_default_graph())
+            net.load(sess, self.savedir, ckptname)
+            npypath = os.path.join(self.savedir, "%s.pkl" % ckptname)
+            net.save_to_numpy(sess, npypath)
+            if self.debug:
+                test_x = np.random.rand(2, *shape[1:]).astype(np.float32) * 10 - 5
+                test_y = sess.run(net.out, {x: test_x})
+                out_var_name = net.out.name
+            self.logger.info("Params of list of numpy array format saved to %s" % npypath)
+            in_graph_def = tf.get_default_graph().as_graph_def()
+            out_graph_def = tf.graph_util.convert_variables_to_constants(
+                sess, in_graph_def, [net.out.op.name])
+            out_graph_def = TransformGraph(out_graph_def, ["x"], [net.out.op.name],
+                                           ["strip_unused_nodes",
+                                            "fold_constants(ignore_errors=true)",
+                                            "fold_batch_norms",
+                                            "fold_old_batch_norms"])
+            ckptpath = os.path.join(self.savedir, "optimized_%s.pb" % ckptname)
+            with tf.gfile.GFile(ckptpath, 'wb') as f:
+                f.write(out_graph_def.SerializeToString())
+            self.logger.info("Optimized frozen pb saved to %s" % ckptpath)
+            node_name_path = os.path.join(self.savedir, "node_name.txt")
+            if not os.path.exists(os.path.join(node_name_path)):
+                with open(node_name_path, "w") as f:
+                    f.write("%s\n%s" % ("x", net.out.op.name))
+            sess.close()
+        if self.debug:
+            with tf.Graph().as_default():
+                gd = tf.GraphDef()
+                with tf.gfile.GFile(ckptpath, "rb") as f:
+                    gd.ParseFromString(f.read())
+                tf.import_graph_def(gd, name="")
+                tf.get_default_graph().finalize()
+                sess = tf.Session()
+                x = tf.get_default_graph().get_tensor_by_name("x:0")
+                out = tf.get_default_graph().get_tensor_by_name(out_var_name)
+                new_y = sess.run(out, {x: test_x})
+                sess.close()
+                diff = np.sqrt(np.mean((new_y - test_y)**2))
+                self.logger.debug("Diff between original and optimized: %f" % diff)
+                self.logger.debug("Diff < 1e-7: %s" % (diff < 1e-7))
 
 
 def main(*args):
@@ -343,7 +353,10 @@ if __name__ == "__main__":
         "error": logging.ERROR,
         "critical": logging.CRITICAL}
     logger = logging.getLogger("Trainer")
-    logger.setLevel(log_lvl[args.logging_lvl])
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(log_lvl[args.logging_lvl])
     formatter = logging.Formatter(
         '[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s', "%Y-%m-%d %H:%M:%S")
     stdhandler = logging.StreamHandler(sys.stdout)
