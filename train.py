@@ -207,12 +207,14 @@ class Trainer():
         self.sess.run([self.reset_correct, self.val_reset_loss])
         if save:
             if acc > self.best_acc:
-                self.logger.info("Epoch %d has the best accuracy so far: %f" % (epoch, acc))
+                self.logger.info(
+                    "Epoch %d has the best accuracy so far: %f, saving..." % (epoch, acc))
                 self.best_acc = acc
                 self.train_net.save(self.sess, self.savedir, "net_best_acc")
                 self.optim_saver.save(self.sess, os.path.join(self.savedir, "optim_best_acc"))
             if loss < self.best_avg_val_loss:
-                self.logger.info("Epoch %d has the best avg_val_loss so far: %f" % (epoch, loss))
+                self.logger.info(
+                    "Epoch %d has the best avg_val_loss so far: %f, saving..." % (epoch, loss))
                 self.best_avg_val_loss = loss
                 self.train_net.save(self.sess, self.savedir, "net_best_loss")
                 self.optim_saver.save(self.sess, os.path.join(self.savedir, "optim_best_loss"))
@@ -255,18 +257,18 @@ class Trainer():
             x = tf.placeholder(tf.float32, shape, name="x")
             net = Net(x, alpha=self.alpha, input_size=(self.input_size, self.input_size),
                       inference_only=True)
-            sess = tf.Session(graph=tf.get_default_graph())
-            net.load(sess, self.savedir, ckptname)
-            npypath = os.path.join(self.savedir, "%s.pkl" % ckptname)
-            net.save_to_numpy(sess, npypath)
-            if self.debug:
-                test_x = np.random.rand(2, *shape[1:]).astype(np.float32) * 10 - 5
-                test_y = sess.run(net.out, {x: test_x})
-                out_var_name = net.out.name
-            self.logger.info("Params of list of numpy array format saved to %s" % npypath)
-            in_graph_def = tf.get_default_graph().as_graph_def()
-            out_graph_def = tf.graph_util.convert_variables_to_constants(
-                sess, in_graph_def, [net.out.op.name])
+            with tf.Session() as sess:
+                net.load(sess, self.savedir, ckptname)
+                npypath = os.path.join(self.savedir, "%s.pkl" % ckptname)
+                net.save_to_numpy(sess, npypath)
+                if self.debug:
+                    test_x = np.random.rand(2, *shape[1:]).astype(np.float32) * 10 - 5
+                    test_y = sess.run(net.out, {x: test_x})
+                    out_var_name = net.out.name
+                self.logger.info("Params of list of numpy array format saved to %s" % npypath)
+                in_graph_def = tf.get_default_graph().as_graph_def()
+                out_graph_def = tf.graph_util.convert_variables_to_constants(
+                    sess, in_graph_def, [net.out.op.name])
             out_graph_def = TransformGraph(out_graph_def, ["x"], [net.out.op.name],
                                            ["strip_unused_nodes",
                                             "fold_constants(ignore_errors=true)",
@@ -280,7 +282,6 @@ class Trainer():
             if not os.path.exists(os.path.join(node_name_path)):
                 with open(node_name_path, "w") as f:
                     f.write("%s\n%s" % ("x", net.out.op.name))
-            sess.close()
         if self.debug:
             with tf.Graph().as_default():
                 gd = tf.GraphDef()
@@ -288,18 +289,17 @@ class Trainer():
                     gd.ParseFromString(f.read())
                 tf.import_graph_def(gd, name="")
                 tf.get_default_graph().finalize()
-                sess = tf.Session()
-                x = tf.get_default_graph().get_tensor_by_name("x:0")
-                out = tf.get_default_graph().get_tensor_by_name(out_var_name)
-                new_y = sess.run(out, {x: test_x})
-                sess.close()
+                with tf.Session() as sess:
+                    x = tf.get_default_graph().get_tensor_by_name("x:0")
+                    out = tf.get_default_graph().get_tensor_by_name(out_var_name)
+                    new_y = sess.run(out, {x: test_x})
                 diff = np.sqrt(np.mean((new_y - test_y)**2))
                 self.logger.debug("Diff between original and optimized: %f" % diff)
                 self.logger.debug("Diff < 1e-7: %s" % (diff < 1e-7))
 
 
-def main(*args):
-    t = Trainer(*args)
+def main(**kwargs):
+    t = Trainer(**kwargs)
     t.fit()
     t.export_best()
 
@@ -316,9 +316,9 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--alpha", type=float, default=0.5,
                         choices=[0.5, 1.0])
-    parser.add_argument("--init_lr", type=float, default=1e-3)
     parser.add_argument("--optim", type=str, default="adam",
                         choices=list(__optimizers__.keys()))
+    parser.add_argument("--init_lr", type=float, default=1e-3)
     parser.add_argument("--optim_arg1", type=float, default=.9)
     parser.add_argument("--optim_arg2", type=float, default=.999)
     parser.add_argument("--optim_arg3", type=float, default=1e-8,
@@ -337,38 +337,38 @@ if __name__ == "__main__":
     parser.add_argument("--logging_lvl", type=str, default="info",
                         choices=["debug", "info", "warning", "error", "critical"])
     parser.add_argument("--logger_out_file", type=str, default=None)
-    parser.add_argument("--restore", type=str, default=None)
-    parser.add_argument("--show_tf_cpp_log", action="store_true")
     parser.add_argument("--not_show_progress_bar", action="store_true")
+    parser.add_argument("--restore", type=str, default=None)
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--show_tf_cpp_log", action="store_true")
     args = parser.parse_args()
 
     if not args.show_tf_cpp_log:
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+    args.show_progress = not args.not_show_progress_bar
     log_lvl = {
         "debug": logging.DEBUG,
         "info": logging.INFO,
         "warning": logging.WARNING,
         "error": logging.ERROR,
         "critical": logging.CRITICAL}
-    logger = logging.getLogger("Trainer")
+    args.logger = logging.getLogger("Trainer")
     if args.debug:
-        logger.setLevel(logging.DEBUG)
+        args.logger.setLevel(logging.DEBUG)
     else:
-        logger.setLevel(log_lvl[args.logging_lvl])
+        args.logger.setLevel(log_lvl[args.logging_lvl])
     formatter = logging.Formatter(
         '[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s', "%Y-%m-%d %H:%M:%S")
     stdhandler = logging.StreamHandler(sys.stdout)
     stdhandler.setFormatter(formatter)
-    logger.addHandler(stdhandler)
+    args.logger.addHandler(stdhandler)
     if args.logger_out_file is not None:
         fhandler = logging.StreamHandler(open(args.logger_out_file, "a"))
         fhandler.setFormatter(formatter)
-        logger.addHandler(fhandler)
-    optim_args = [args.optim_arg1, args.optim_arg2, args.optim_arg3]
-    main(
-        args.data_folder, args.batch_size, args.input_size, args.valset_ratio, args.epochs,
-        args.alpha, args.optim, args.init_lr, optim_args, args.lr_decay_step,
-        args.lr_decay_rate, args.init_param, args.logdir, args.savedir, args.random_seed,
-        logger, not args.not_show_progress_bar, args.restore, args.debug)
+        args.logger.addHandler(fhandler)
+    args.optim_args = [args.optim_arg1, args.optim_arg2, args.optim_arg3]
+    del args.optim_arg1, args.optim_arg2, args.optim_arg3, args.show_tf_cpp_log
+    del args.not_show_progress_bar, args.logging_lvl, args.logger_out_file
+    kwargs = vars(args)
+    main(**kwargs)
