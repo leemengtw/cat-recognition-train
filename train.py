@@ -14,7 +14,7 @@ except (ModuleNotFoundError, ImportError):
     __no_tqdm__ = True
 
 
-def _tqdm(res):
+def _tqdm(res, *args, **kwargs):
     return res
 
 
@@ -52,6 +52,7 @@ class Trainer():
             show_progress=True,
             restore=None,
             debug=False):
+        self.ascii = os.name == "nt"
         self.debug = debug
         if optim == "sgd":
             optim_args[2] = optim_args[2] >= 1.
@@ -197,7 +198,8 @@ class Trainer():
 
     def eval(self, epoch, save=True):
         self.trainset.initialize(self.sess, False)  # inits valset inside trainset
-        for _ in self.tqdm(range(len(self.trainset)), desc="[Epoch %d Evaluation]" % epoch):
+        for _ in self.tqdm(range(len(self.trainset)),
+                           desc="[Epoch %d Evaluation]" % epoch, ascii=self.ascii):
             self.sess.run(
                 [self.accum_correct, self.val_accum_loss], {self.val_net.is_training: False})
         acc, loss, summary = self.sess.run([self.accuracy, self.val_avg_loss, self.val_summary])
@@ -239,7 +241,7 @@ class Trainer():
             self.trainset.initialize(self.sess, True)
             self.logger.info("Epoch %d begins..." % epoch)
             for _ in self.tqdm(range(1, len(self.trainset) + 1),
-                               desc="[Epoch %d/%d]" % (epoch, self.epochs)):
+                               desc="[Epoch %d/%d]" % (epoch, self.epochs), ascii=self.ascii):
                 self.sess.run([self.train_accum_loss, self.train_op], {
                     self.train_net.is_training: True,
                     self.global_step: epoch})
