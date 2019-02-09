@@ -1,4 +1,3 @@
-import os
 import tensorflow as tf
 
 
@@ -39,19 +38,16 @@ class Predictor():
 
 
 def gen_kaggle_sub(model_path):
-    import numpy as np
-
-    def sigmoid(x):
-        return 1 / (1 + np.exp(-x))
-
+    import os
     fpaths = [os.path.join('datasets', 'test1', '%d.jpg' % i) for i in range(1, 12501)]
     number = [i for i in range(1, 12501)]
     out_f = ['id,label']
     p = Predictor(model_path)
     for idx, fpath in zip(number, fpaths):
-        pred = 1 - sigmoid(p.predict(fpath))
+        # cat: 0, dog: 1, opposing our settings
+        pred = 0 if p.predict(fpath) > 0 else 1
         print(fpath, pred, end='\033[K\r')
-        out_f.append("%d,%f" % (idx, pred))
+        out_f.append("%d,%d" % (idx, pred))
     print(fpath, pred)
     with open('submission.csv', 'w') as f:
         f.write("\n".join(out_f))
@@ -59,5 +55,10 @@ def gen_kaggle_sub(model_path):
 
 
 if __name__ == '__main__':
-    import sys
-    gen_kaggle_sub(sys.argv[1])
+    import argparse
+    import os
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--path", type=str,
+        default=os.path.join("baseline_model", "optimized_net_best_acc.pb"))
+    gen_kaggle_sub(parser.parse_args().path)
