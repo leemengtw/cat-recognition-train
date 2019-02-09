@@ -73,9 +73,8 @@ class Dataset():
                         (_random_resize, None)]
 
                 def _process(img, label):
-                    # label = tf.cast(label, tf.float32)
-                    # FIXME: how to use tf.image.decode_image instead of decode_jpeg?
-                    img = tf.image.decode_jpeg(tf.read_file(img))
+                    # NOTE: decode_jpeg supports png
+                    img = tf.image.decode_jpeg(tf.read_file(img), channels=3)
                     if is_train:
                         aug_prob = tf.random_uniform(shape=[4], minval=0., maxval=1.)
                         img = tf.image.random_flip_left_right(img)
@@ -106,8 +105,8 @@ class Dataset():
             paths = tf.constant(paths)
             dataset = tf.data.Dataset.from_tensor_slices(paths)
             self.dataset = dataset.map(
-                lambda img: _normalize(tf.image.resize_images(
-                    tf.image.decode_jpeg(tf.read_file(img)), self.size))).batch(batch_size)
+                lambda img: _normalize(tf.image.resize_images(tf.image.decode_jpeg(
+                    tf.read_file(img), channels=3), self.size))).batch(batch_size)
             self.iterator = self.dataset.make_initializable_iterator()
             self.initializer = self.iterator.initializer
 
