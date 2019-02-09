@@ -126,3 +126,4 @@ runs/
 ckpts/
 tmp/
 frozen_graphs/
+**/*.pb

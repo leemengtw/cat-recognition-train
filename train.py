@@ -3,7 +3,7 @@ import pickle
 from datetime import datetime
 import numpy as np
 import tensorflow as tf
-from dataset import Dataset
+from dataset import Dataset, MEAN, STD
 from net import Net
 from tensorflow.tools.graph_transforms import TransformGraph
 
@@ -254,25 +254,35 @@ class Trainer():
         self.export("net_best_loss")
 
     def export(self, ckptname):
-        shape = [None, self.input_size, self.input_size, 3]
+        shape = (self.input_size, self.input_size)
         with tf.Graph().as_default():
-            x = tf.placeholder(tf.float32, shape, name="x")
+            in_node_name = "img_path"
+            img_path = tf.placeholder(tf.string, name=in_node_name)
+            # NOTE: decode_jpeg supports png
+            x = tf.cast(tf.image.resize_images(tf.expand_dims(
+                tf.image.decode_jpeg(tf.read_file(img_path), channels=3), 0), shape), tf.float32)
+            x = (x - tf.constant([[[MEAN]]])) / tf.constant([[[STD]]])  # [[[]]] for [n, c, h, w]
+            # Hope graph optimization tool may fuse these ops.
+            # NOTE: tf.image.resize_images does expand_dims on ndims==3 images and squeeze
+            #       back; thus expand_dims first so resize_image would do less things.
             net = Net(x, alpha=self.alpha, input_size=(self.input_size, self.input_size),
-                      inference_only=True)
+                      optim_graph=True)  # optim_graph==True makes inference_only==True
             with tf.Session() as sess:
                 net.load(sess, self.savedir, ckptname)
                 npypath = os.path.join(self.savedir, "%s.pkl" % ckptname)
                 net.save_to_numpy(sess, npypath)
                 if self.debug:
-                    test_x = np.random.rand(2, *shape[1:]).astype(np.float32) * 10 - 5
-                    test_y = sess.run(net.out, {x: test_x})
+                    test_img = os.path.join("datasets", "train", "cat.0.jpg")
+                    test_y = sess.run(
+                        net.out, {img_path: test_img})
                     out_var_name = net.out.name
                 self.logger.info("Params of list of numpy array format saved to %s" % npypath)
                 in_graph_def = tf.get_default_graph().as_graph_def()
                 out_graph_def = tf.graph_util.convert_variables_to_constants(
                     sess, in_graph_def, [net.out.op.name])
-            out_graph_def = TransformGraph(out_graph_def, ["x"], [net.out.op.name],
+            out_graph_def = TransformGraph(out_graph_def, [in_node_name], [net.out.op.name],
                                            ["strip_unused_nodes",
+                                            # "fuse_convolutions",
                                             "fold_constants(ignore_errors=true)",
                                             "fold_batch_norms",
                                             "fold_old_batch_norms"])
@@ -283,7 +293,7 @@ class Trainer():
             node_name_path = os.path.join(self.savedir, "node_name.txt")
             if not os.path.exists(os.path.join(node_name_path)):
                 with open(node_name_path, "w") as f:
-                    f.write("%s\n%s" % ("x", net.out.op.name))
+                    f.write("%s\n%s" % (in_node_name, net.out.op.name))
         if self.debug:
             with tf.Graph().as_default():
                 gd = tf.GraphDef()
@@ -292,12 +302,12 @@ class Trainer():
                 tf.import_graph_def(gd, name="")
                 tf.get_default_graph().finalize()
                 with tf.Session() as sess:
-                    x = tf.get_default_graph().get_tensor_by_name("x:0")
+                    img_path = tf.get_default_graph().get_tensor_by_name("%s:0" % in_node_name)
                     out = tf.get_default_graph().get_tensor_by_name(out_var_name)
-                    new_y = sess.run(out, {x: test_x})
-                diff = np.sqrt(np.mean((new_y - test_y)**2))
+                    new_y = sess.run(out, {img_path: test_img})
+                diff = np.abs(new_y - test_y)
                 self.logger.debug("Diff between original and optimized: %f" % diff)
-                self.logger.debug("Diff < 1e-7: %s" % (diff < 1e-7))
+                self.logger.debug("Diff < 5e-7: %s" % (diff < 5e-7))
 
 
 def main(**kwargs):

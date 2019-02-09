@@ -183,14 +183,17 @@ class Net():
 
     # FIXME: reuse for validation!
     def __init__(
-            self, x, cls=2, alpha=.5, input_size=(224, 224),
-            inference_only=False, init_param=None, reuse=False, test_convert=False):
+            self, x, cls=2, alpha=.5, input_size=(224, 224), inference_only=False,
+            init_param=None, reuse=False, optim_graph=False, test_convert=False):
         # init_parmas is used when loading weight pretrained on other dataset(s), normally
         # imagenet, so the weights from the last fully connect layer should not be loaded
         assert len(input_size) == 2
         self.test_convert = test_convert
         self.output_neuron = cls if cls > 2 else 1
         self.x = x  # placeholder or data from tf.data.Dataset
+        self.optim_graph = optim_graph
+        if optim_graph:
+            inference_only = True
         self.inference_only = inference_only
         self.saver = None
         self.saved_graph = False
@@ -259,7 +262,9 @@ class Net():
             res = tf.reshape(global_avg_pooling(res), [-1, self.last_chs])
             # not loading from params
             res = fully_connected(res, self.last_chs, self.output_neuron, m_cnt + 2)
-            if self.output_neuron == 1:  # used on binary classification
+            if self.output_neuron == 1 and self.optim_graph:  # for optimzed graph
+                res = tf.reshape(res, [])
+            elif self.output_neuron == 1:  # used on binary classification
                 res = tf.reshape(res, [-1])
         return res
 
