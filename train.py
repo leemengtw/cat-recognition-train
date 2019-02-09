@@ -290,7 +290,7 @@ class Trainer():
             with tf.gfile.GFile(ckptpath, 'wb') as f:
                 f.write(out_graph_def.SerializeToString())
             self.logger.info("Optimized frozen pb saved to %s" % ckptpath)
-            node_name_path = os.path.join(self.savedir, "node_name.txt")
+            node_name_path = os.path.join(self.savedir, "node_names.txt")
             if not os.path.exists(os.path.join(node_name_path)):
                 with open(node_name_path, "w") as f:
                     f.write("%s\n%s" % (in_node_name, net.out.op.name))
@@ -325,7 +325,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--input_size", type=int, default=224)
     parser.add_argument("--valset_ratio", type=float, default=.2)
-    parser.add_argument("--epochs", type=int, default=60)
+    parser.add_argument("--epochs", type=int, default=90)
     parser.add_argument("--alpha", type=float, default=0.5,
                         choices=[0.5, 1.0])
     parser.add_argument("--optim", type=str, default="adam",
@@ -339,7 +339,7 @@ if __name__ == "__main__":
                             "and you're passing this arg greater-equal than 1, "
                             "you're using Nesterov momentum."
                         ))
-    parser.add_argument("--lr_decay_step", type=int, default=20)
+    parser.add_argument("--lr_decay_step", type=int, default=30)
     parser.add_argument("--lr_decay_rate", type=float, default=.1)
     parser.add_argument(
         "--init_param", type=str, default="imagenet_pretrained_shufflenetv2_0.5.pkl")
