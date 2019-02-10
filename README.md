@@ -21,7 +21,7 @@ or
 $ conda install --file requirements.txt
 ```
 
-However, if you want to use GPU to accelerate the training process, please visit [https://www.tensorflow.org/install/gpu](https://www.tensorflow.org/install/gpu) for more information.
+However, if you want to use GPU to accelerate the training process, please visit [TensorFlow - GPU support](https://www.tensorflow.org/install/gpu) for more information.
 
 ## Train a Convoluational Neural Network
 
