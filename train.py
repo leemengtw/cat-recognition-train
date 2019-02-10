@@ -324,7 +324,7 @@ if __name__ == "__main__":
     parser.add_argument("--data_folder", type=str, default="datasets")
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--input_size", type=int, default=224)
-    parser.add_argument("--valset_ratio", type=float, default=.2)
+    parser.add_argument("--valset_ratio", type=float, default=.1)
     parser.add_argument("--epochs", type=int, default=90)
     parser.add_argument("--alpha", type=float, default=0.5,
                         choices=[0.5, 1.0])
