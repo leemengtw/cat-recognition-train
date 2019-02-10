@@ -33,7 +33,7 @@ class Trainer():
 
     def __init__(
             self,
-            data_folder="dataset",
+            data_folder="datasets",
             batch_size=64,
             input_size=224,
             valset_ratio=.2,

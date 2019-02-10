@@ -56,11 +56,15 @@ cat-recognition-train
 +-- ...
 ```
 
-After all requirements set, run:
+After all requirements set, run the following command using default arguments:
 ```
 $ python train.py
 ```
 
+Or you can pass your desired arguments:
+```
+$ python train.py --epochs 30 --batch_size 32 --valset_ratio .1 --optim sgd --lr_decay_step 10
+```
 See `train.py` for available arguments.
 
 ## Visualizing Learning using Tensorboard
