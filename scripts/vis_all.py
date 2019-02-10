@@ -1,3 +1,4 @@
+import os
 from glob import glob
 import tensorflow as tf
 
@@ -12,7 +13,8 @@ def main():
             tf.import_graph_def(gd, name='')
         tf.get_default_graph().finalize()
         with tf.Session() as sess:
-            writer = tf.summary.FileWriter(pb.replace(".pb", ""), sess.graph)
+            writer = tf.summary.FileWriter(
+                os.path.join("runs", pb.replace(".pb", "")), sess.graph)
             writer.close()
 
 

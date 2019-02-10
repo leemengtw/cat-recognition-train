@@ -1,83 +1,75 @@
 # Cat-recognition-train
-This repository demonstrates how to train cat vs dog recognition model.
+This repository demonstrates how to train a cat vs dog recognition model and export the model to an optimized frozen graph easy for deployment using TensorFlow.
 
-## Demo on [Heroku](https://damp-anchorage-60936.herokuapp.com/)
+## Requirements
+- Python3 (Tested on 3.6.8)
+- TensorFlow (Tested on 1.12.0)
+- NumPy (Tested on 1.15.1)
+- tqdm (Tested on 4.29.1)
+- Dogs vs. Cats dataset from [https://www.kaggle.com/c/dogs-vs-cats](https://www.kaggle.com/c/dogs-vs-cats)
+- (Optional if you want to run tests) PyTorch (Tested on 1.0.0 and 1.0.1)
 
-It may take some time to boot the heroku app because we have lots of dependencies.  
-The application is devided into two parts, left panel for uploading image for recognizing cats / dogs and the right panel act as gallery.
+## Build environment
+We recommend using Anaconda3 / Miniconda3 to manage your python environment.
 
-<p align="center">
-  <a href="https://damp-anchorage-60936.herokuapp.com/" target="_blank"><img src="images/cover.png" alt="Cover" width="60%"/></a>
-</p>
-
-
-## Background
-Although there are lots of good tutorials telling you how to build a machine learning model,
-we feel that there is little explanation about how to actually deploy your model as a web application.
-
-
-So we decided to build a simple image classifier
-that is able to recognize cats and deploy it in order to simulate(or at least practice)
-how to actually deploy a ML model in real world.
-
-We will also use [TensorBoard](https://www.tensorflow.org/get_started/summaries_and_tensorboard) to visualize how our model is learning to gain more insight.
-
-
-## Table of contents
-- Build environment (on mac)
-- Train a Convolutional Neural Network as image classifier
-- Visualizing Learning using Tensorboard
-- Build a Flask application
-    * Allow users upload images
-    * Make predictions using trained model
-- Deploy the application on Heroku
-
-
-## Build environment (on mac)
-We will use python 3.6 and [pyenv](https://github.com/pyenv/pyenv) to management our environment.
-```commandline
-pyenv install 3.6.1
+If the machine you're using does not have a GPU instance, you can just:
+```
+$ pip install -r requirements.txt
+```
+or,
+```
+$ conda install --file requirements.txt
 ```
 
-Create a new virtual environment to manage dependencies
-and use the env under current project folder.
-```commandline
-pyenv virtualenv 3.6.1 py3.6-ml-app
-cd cat-recognition-app/
-pyenv local py3.6-ml-app
-```
-
-Install dependencies for training models and visualization.
-We will train our models using TensorFlow on jupyter notebook.
-```commandline
-pip install numpy tensorflow jupyter scipy pillow matplotlib seaborn jupyter_contrib_nbextensions ipywidgets
-```
+However, if you want to use GPU to accelerate the training process, please visit [https://www.tensorflow.org/install/gpu](https://www.tensorflow.org/install/gpu) for more information.
 
 ## Train a Convoluational Neural Network
 
 In this part, we will use [TensorFlow](https://github.com/tensorflow/tensorflow) to train a CNN to classify cats' images from dogs' image
 using Kaggle dataset [Dogs vs. Cats](https://www.kaggle.com/c/dogs-vs-cats/data). We will do the following things:
-- Load, resize and normalize the images
-- Create training/valid set
-- Train a CNN model
-- Serialize the model for later deployment
+- Create training/valid set (dataset.py)
+- Load, augment, resize and normalize the images using `tensorflow.data.Dataset` api. (dataset.py)
+- Define a CNN model (net.py)
+    * Here we use the [ShufflenetV2 structure](https://arxiv.org/abs/1807.11164), which achieves great balance between speed and accuracy.
+    * We do transfer learning on ShuffleNetV2 using the pretrained weights from [https://github.com/ericsun99/Shufflenet-v2-Pytorch](https://github.com/ericsun99/Shufflenet-v2-Pytorch).
+    * If you want to know how to load PyTorch weights onto TensorFlow model graph, please check `convert_pytorch_weight_test` starting from line 44 in `module_tests.py`.
+- Train the CNN model (train.py)
+- Serialize the model for deployment (train.py)
 
-All steps described above will be included in the jupyter notebook [cat_recognizer](cat_recognizer.ipynb).
-If you want to execute the code in the notebook, install all the extra dependencies.
+If you want to execute the code, make sure you have all package requirements installed, and Dogs vs. Cats training dataset placed in `datasets`. The folder structure should be like:
 
-```commandline
-jupyter nbextension enable --py widgetsnbextension
+```
+cat-recognition-train
++-- train.py
++-- net.py
++-- dataset.py
++-- datasets
+    +-- train
+    |   +-- cat.0.jpg
+    |   +-- cat.1.jpg
+    |   ...
+    |   +-- cat.12499.jpg
+    |   +-- dog.0.jpg
+    |   +-- dog.1.jpg
+    |   ...
+    |   +-- dog.12499.jpg
++-- ...
 ```
 
-Start a jupyter server:
-
-```commandline
-jupyter notebook
+After all requirements set, run:
+```
+$ python train.py
 ```
 
-And you should be able to open and run the notebook at localhost:8888.
+See `train.py` for available arguments.
 
 ## Visualizing Learning using Tensorboard
+During training, you can supervise how is the training going by running:
+```
+$ tensorboard --logdir runs
+```
+And you can check the tensorboard summaries on `localhost:6006`.
+
 
 When training the model defined in the [cat_recognizer](cat_recognizer.ipynb), in addition to the reported accuracy messages showed in the notebook, you may be wondering:
 - how do our neural network look like?
