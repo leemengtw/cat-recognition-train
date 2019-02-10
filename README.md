@@ -24,7 +24,7 @@ $ conda install --file requirements.txt
 
 However, if you want to use GPU to accelerate the training process, please visit [TensorFlow - GPU support](https://www.tensorflow.org/install/gpu) for more information.
 
-## Train a Convoluational Neural Network
+## Train a Convolutional Neural Network
 
 In this part, we will use [TensorFlow](https://github.com/tensorflow/tensorflow) to train a CNN to classify cats' images from dogs' image
 using Kaggle dataset [Dogs vs. Cats](https://www.kaggle.com/c/dogs-vs-cats/data). We will do the following things:
@@ -100,12 +100,25 @@ And you can check the tensorboard summaries on `localhost:6006`.
 
 ## Predict Using the Trained Model
 
-See `predict.py` for details.
+See `predict.py` for details and demo.
+
+<p align="center">
+  <img src="images/test.png" >
+  <caption>Default image used for predict.py demo</caption>
+</p>
 
 You can run 
 ```
 $ python predict.py
 ```
+The result should be:
+```
+Predicting catness on images/test.png using model from baseline_model/optimized_net_best_acc.pb
+Catness: 16.460064
+Cat Probability: 1.000000
+It's a cat.
+```
+
 for demonstration. Also, if you have your own cat / dog photo for testing, run
 ```
 $ python predict.py --path path/to/your/img.png
