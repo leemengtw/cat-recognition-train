@@ -195,7 +195,6 @@ class Net():
         if optim_graph:
             inference_only = True
         self.inference_only = inference_only
-        self.saver = None
         self.saved_graph = False
         # inference_only: so there's no need to feed is_training placholder on frozen graph
         #                 and hope graph optimization tool will fuse the constants.
@@ -224,7 +223,7 @@ class Net():
             self.out = self.build_net(init_param)
         self.to_save_vars = [
             v for v in tf.global_variables() if v.name.startswith(self.graph_name_prefix)]
-        self.saver = tf.train.Saver(self.to_save_vars)
+        self.saver = None if reuse else tf.train.Saver(self.to_save_vars)
 
     def build_net(self, params):
         res = self.x
@@ -269,19 +268,21 @@ class Net():
         return res
 
     def save(self, sess, directory, fname):
-        if not os.path.isdir(directory):
-            os.makedirs(directory)
-        if not self.saved_graph:
-            tf.train.write_graph(
-                sess.graph.as_graph_def(), directory, "%s.pbtxt" % fname, as_text=True)
-            self.saved_graph = True
-        self.saver.save(sess, os.path.join(directory, fname))
+        if self.saver is not None:
+            if not os.path.isdir(directory):
+                os.makedirs(directory)
+            if not self.saved_graph:
+                tf.train.write_graph(
+                    sess.graph.as_graph_def(), directory, "%s.pbtxt" % fname, as_text=True)
+                self.saved_graph = True
+            self.saver.save(sess, os.path.join(directory, fname))
 
     def load(self, sess, directory, fname=None):
-        if fname is not None:
-            self.saver.restore(sess, os.path.join(directory, fname))
-        else:
-            self.saver.restore(sess, tf.train.latest_checkpoint(directory))
+        if self.saver is not None:
+            if fname is not None:
+                self.saver.restore(sess, os.path.join(directory, fname))
+            else:
+                self.saver.restore(sess, tf.train.latest_checkpoint(directory))
 
     def load_from_numpy(self, sess, params=None, path=None):
         assert bool(params is not None) != bool(path is not None),\
@@ -298,6 +299,3 @@ class Net():
         params = [np.array(sess.run(v)) for v in self.to_save_vars]
         with open(path, "wb") as f:
             pickle.dump(params, f)
-
-    def __call__(self):
-        return self.out

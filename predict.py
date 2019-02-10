@@ -1,3 +1,4 @@
+import os
 import tensorflow as tf
 
 
@@ -9,7 +10,9 @@ class Predictor():
         node_name_path: path to input / output node names of the frozen pb.
     """
 
-    def __init__(self, path, node_name_path="node_names.txt"):
+    def __init__(self, path, node_name_path="node_names.txt", show_tf_flag=False):
+        if not show_tf_flag:
+            os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
         with open(node_name_path) as f:
             node_names = f.read().splitlines()
         self.graph = tf.Graph()
@@ -55,6 +58,7 @@ def gen_kaggle_sub(model_path):
 
 
 def main(m_path, i_path):
+    print("Predicting catness on %s using model from %s" % (i_path, m_path))
     import numpy as np
     p = Predictor(m_path)
     catness = p.predict(i_path)
@@ -65,7 +69,6 @@ def main(m_path, i_path):
 
 if __name__ == '__main__':
     import argparse
-    import os
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_path", type=str,

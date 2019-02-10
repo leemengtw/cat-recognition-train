@@ -16,7 +16,7 @@ If the machine you're using does not have a GPU instance, you can just:
 ```
 $ pip install -r requirements.txt
 ```
-or,
+or
 ```
 $ conda install --file requirements.txt
 ```
@@ -95,3 +95,19 @@ And you can check the tensorboard summaries on `localhost:6006`.
   <img src="images/optimized_graph.png" >
   <caption>Optimized Network Graph</caption>
 </p>
+
+
+## Predict Using the Trained Model
+
+See `predict.py` for details.
+
+You can run 
+```
+$ python predict.py
+```
+for demonstration. Also, if you have your own cat / dog photo for testing, run
+```
+$ python predict.py --path path/to/your/img.png
+```
+
+PNGs, JPGs, BMPs are supported.
