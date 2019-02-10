@@ -1,247 +1,114 @@
-# Cat-recognition-app
-A flask app showcasing how to recognize cats using Tensorflow.
+# Cat-recognition-train
+This repository demonstrates how to train a cat vs dog recognition model and export the model to an optimized frozen graph easy for deployment using TensorFlow.
+If you want to know how to deploy a flask app which recognizes cats/dogs using TensorFlow, please visit [cat-recognition-app](https://github.com/leemengtaiwan/cat-recognition-app).
 
-This repository contain all the necessary python code required to build a production-ready ML application that able to identify cats in image.
+## Requirements
+- Python3 (Tested on 3.6.8)
+- TensorFlow (Tested on 1.12.0)
+- NumPy (Tested on 1.15.1)
+- tqdm (Tested on 4.29.1)
+- Dogs vs. Cats dataset from [https://www.kaggle.com/c/dogs-vs-cats](https://www.kaggle.com/c/dogs-vs-cats)
+- (Optional if you want to run tests) PyTorch (Tested on 1.0.0 and 1.0.1)
 
-## Demo on [Heroku](https://damp-anchorage-60936.herokuapp.com/)
+## Build environment
+We recommend using Anaconda3 / Miniconda3 to manage your python environment.
 
-It may take some time to boot the heroku app because we have lots of dependencies.  
-The application is devided into two parts, left panel for uploading image for recognizing cats / dogs and the right panel act as gallery.
-
-<p align="center">
-  <a href="https://damp-anchorage-60936.herokuapp.com/" target="_blank"><img src="images/cover.png" alt="Cover" width="60%"/></a>
-</p>
-
-
-## Background
-Although there are lots of good tutorials telling you how to build a machine learning model,
-we feel that there is little explanation about how to actually deploy your model as a web application.
-
-
-So we decided to build a simple image classifier
-that is able to recognize cats and deploy it in order to simulate(or at least practice)
-how to actually deploy a ML model in real world.
-
-We will also use [TensorBoard](https://www.tensorflow.org/get_started/summaries_and_tensorboard) to visualize how our model is learning to gain more insight.
-
-
-## Table of contents
-- Build environment (on mac)
-- Train a Convolutional Neural Network as image classifier
-- Visualizing Learning using Tensorboard
-- Build a Flask application
-    * Allow users upload images
-    * Make predictions using trained model
-- Deploy the application on Heroku
-
-
-## Build environment (on mac)
-We will use python 3.6 and [pyenv](https://github.com/pyenv/pyenv) to management our environment.
-```commandline
-pyenv install 3.6.1
+If the machine you're using does not have a GPU instance, you can just:
+```
+$ pip install -r requirements.txt
+```
+or
+```
+$ conda install --file requirements.txt
 ```
 
-Create a new virtual environment to manage dependencies
-and use the env under current project folder.
-```commandline
-pyenv virtualenv 3.6.1 py3.6-ml-app
-cd cat-recognition-app/
-pyenv local py3.6-ml-app
-```
-
-Install dependencies for training models and visualization.
-We will train our models using TensorFlow on jupyter notebook.
-```commandline
-pip install numpy tensorflow jupyter scipy pillow matplotlib seaborn jupyter_contrib_nbextensions ipywidgets
-```
+However, if you want to use GPU to accelerate the training process, please visit [TensorFlow - GPU support](https://www.tensorflow.org/install/gpu) for more information.
 
 ## Train a Convoluational Neural Network
 
 In this part, we will use [TensorFlow](https://github.com/tensorflow/tensorflow) to train a CNN to classify cats' images from dogs' image
 using Kaggle dataset [Dogs vs. Cats](https://www.kaggle.com/c/dogs-vs-cats/data). We will do the following things:
-- Load, resize and normalize the images
-- Create training/valid set
-- Train a CNN model
-- Serialize the model for later deployment
+- Create training/valid set (dataset.py)
+- Load, augment, resize and normalize the images using `tensorflow.data.Dataset` api. (dataset.py)
+- Define a CNN model (net.py)
+    * Here we use the [ShufflenetV2 structure](https://arxiv.org/abs/1807.11164), which achieves great balance between speed and accuracy.
+    * We do transfer learning on ShuffleNetV2 using the pretrained weights from [https://github.com/ericsun99/Shufflenet-v2-Pytorch](https://github.com/ericsun99/Shufflenet-v2-Pytorch).
+    * If you want to know how to load PyTorch weights onto TensorFlow model graph, please check `convert_pytorch_weight_test` starting from line 44 in `module_tests.py`.
+- Train the CNN model (train.py)
+- Serialize the model for deployment (train.py)
 
-All steps described above will be included in the jupyter notebook [cat_recognizer](cat_recognizer.ipynb).
-If you want to execute the code in the notebook, install all the extra dependencies.
+If you want to execute the code, make sure you have all package requirements installed, and Dogs vs. Cats training dataset placed in `datasets`. The folder structure should be like:
 
-```commandline
-jupyter nbextension enable --py widgetsnbextension
+```
+cat-recognition-train
++-- train.py
++-- net.py
++-- dataset.py
++-- datasets
+    +-- train
+    |   +-- cat.0.jpg
+    |   +-- cat.1.jpg
+    |   ...
+    |   +-- cat.12499.jpg
+    |   +-- dog.0.jpg
+    |   +-- dog.1.jpg
+    |   ...
+    |   +-- dog.12499.jpg
++-- ...
 ```
 
-Start a jupyter server:
-
-```commandline
-jupyter notebook
+After all requirements set, run the following command using default arguments:
+```
+$ python train.py
 ```
 
-And you should be able to open and run the notebook at localhost:8888.
+Or you can pass your desired arguments:
+```
+$ python train.py --epochs 30 --batch_size 32 --valset_ratio .1 --optim sgd --lr_decay_step 10
+```
+See `train.py` for available arguments.
 
 ## Visualizing Learning using Tensorboard
-
-When training the model defined in the [cat_recognizer](cat_recognizer.ipynb), in addition to the reported accuracy messages showed in the notebook, you may be wondering:
-- how do our neural network look like?
-- what kind of images do we actually put into the model?
-- do model improve during training?
-
-These questions can be answered or better understood by viewing [Tensorboard](https://www.tensorflow.org/get_started/summaries_and_tensorboard). To open the tensorboard for this repo, enter:
-
-```commandline
-tensorboard --logdir=/tmp/tensorboard/cat-recognizer/
+During training, you can supervise how is the training going by running:
 ```
+$ tensorboard --logdir runs
+```
+And you can check the tensorboard summaries on `localhost:6006`.
 
-And you should be able to see all the interesting things on `localhost:6006`:
-
-### Neural Network structure
-
-As shown below, our simple neural network consist of two conv layers, followed by
-one fully-connected layer (fc1) and the output layer (fc2) with single neuron.
-In order to prevent overfitting, there is also a dropout mechnism between conv layer
-and fully-connected layer.
+### Training Flow
 
 <p align="center">
-  <img src="images/first_naive_nn.png">
+  <img src="images/train_graph.png">
+  <caption>Whole training flow, including CNN model and other training operations like optimizer, saver, etc</caption>
 </p>
-
-Notice here for the sake of clarity, some nodes (e.g. save, evaluation) are
-removed so that only the training nodes remains. You may see a more complex
-compuation graph on Tensorboard.
 
 ### Model Performance
 
 <p align="center">
   <img src="images/scalars_on_tensor_board.png" >
-  <caption>Accuracy and loss of trained model on Tensorboard</caption>
+  <caption>Validation/Train loss and validation accuracy on each epoch</caption>
 </p>
 
 
-### Some images used for Training
+### Optimized Network Graph
 
 <p align="center">
-  <img src="images/training_images_on_tensorboard.png" >
-  <caption>Images used in a mini-batch</caption>
+  <img src="images/optimized_graph.png" >
+  <caption>Optimized Network Graph</caption>
 </p>
 
 
+## Predict Using the Trained Model
 
-## Build a Flask application
+See `predict.py` for details.
 
-In this part, we will build a simple flask web application which allow users
-to upload images and predict whether there are cats in the images using the
-model we trained in previous part.
-
-In order to run the app, extra dependencies are needed:
-```commandline
-pip install flask flask-bootstrap boto3
+You can run 
+```
+$ python predict.py
+```
+for demonstration. Also, if you have your own cat / dog photo for testing, run
+```
+$ python predict.py --path path/to/your/img.png
 ```
 
-To start the flask application:
-
-```commandline
-python app.py
-```
-
-And you should be able to view the app at localhost:5000 using the browsers.
-
-
-## Deploy the application on Heroku
-
-In order to deploy the app on the Heroku, a user account and the [Heroku CLI](https://devcenter.heroku.com/articles/heroku-cli) are required.
-
-To install the Heroku CLI on mac:
-```commandline
-brew install heroku/brew/heroku
-```
-
-Login using your account:
-```commandline
-heroku login
-```
-
-Install the dependencies and setting files:
-```commandline
-pip install gunicorn
-pip freeze > requirements.txt
-
-touch runtime.txt
-echo "python-3.6.1" > runtime.txt
-
-touch Procfile
-echo "web: gunicorn app:app --log-file=-" > Procfile
-```
-
-Create a new Heroku application:
-```commandline
-heroku create
-
-Creating app... done, ⬢ damp-anchorage-60936
-https://damp-anchorage-60936.herokuapp.com/ | https://git.heroku.com/damp-anchorage-60936.git
-```
-
-Deploy the application on Heroku. Your application id will be different from ours, which is `damp-anchorage-60936`
-```
-heroku git:remote -a damp-anchorage-60936
-git add .
-git commit -m "First commit"
-git push heroku master
-```
-
-And you should be able to see the application on `https://YOUR-APPLICATION-NUM.herokuapp.com/`.
-
-
-## Run app on Docker
-Get the image on the Dockerhub
-```commandline
-docker pull leemeng/cat
-```
-
-Enable access to application running on docker @ `localhost:1234`
-```commandline
-docker run -dp 1234:5000 leemeng/cat
-```
-
-Check whether the application is running
-```commandline
-docker ps
-CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS                    NAMES
-a887934e1849        leemeng/cat         "python3 app.py"    3 minutes ago       Up 3 minutes        0.0.0.0:1234->5000/tcp   thirsty_carson
-```
-
-Stop the application
-```commandline
-docker stop a887934e1849
-```
-
-## Trouble Shooting
-### [pyenv build fail](https://github.com/pyenv/pyenv/issues/655)
-
-Try install CLI dev tools
-```commandline
-xcode-select --install
-```
-### Incompatable ruby version when installing Heroku CLI (MAC)
-
-Update ruby using brew and make it the default ruby
-```commandline
-brew install rbenv ruby-build
-
-# Add rbenv to bash so that it loads every time you open a terminal
-echo 'if which rbenv > /dev/null; then eval "$(rbenv init -)"; fi' >> ~/.bash_profile
-source ~/.bash_profile
-
-# Install Ruby
-rbenv install 2.4.2
-rbenv global 2.4.2
-ruby -v
-```
-
-## Dependencies
-
-To install all the dependencies listed in [requirements.txt](requirements.txt)
-all at once:
-
-```commandline
-pip install -r requirements.txt
-```
+PNGs, JPGs, BMPs are supported.
