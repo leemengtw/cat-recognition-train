@@ -1,5 +1,6 @@
 # Cat-recognition-train
 This repository demonstrates how to train a cat vs dog recognition model and export the model to an optimized frozen graph easy for deployment using TensorFlow.
+If you want to know how to deploy a flask app which recognizes cats/dogs using TensorFlow, please visit [cat-recognition-app](https://github.com/leemengtaiwan/cat-recognition-app).
 
 ## Requirements
 - Python3 (Tested on 3.6.8)
