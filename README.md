@@ -75,11 +75,11 @@ $ tensorboard --logdir runs
 ```
 And you can check the tensorboard summaries on `localhost:6006`.
 
-### Training Flow
+### Training and Validation Flow
 
 <p align="center">
   <img src="images/train_graph.png">
-  <caption>Whole training flow, including CNN model and other training operations like optimizer, saver, etc</caption>
+  <caption>Whole training and validation flow, including CNN model and other training/validation operations like optimizer, saver, accuracy counter, etc</caption>
 </p>
 
 ### Model Performance
