@@ -77,7 +77,7 @@ And you can check the tensorboard summaries on `localhost:6006`.
 ### Training Flow
 
 <p align="center">
-  <img src="images/training_graph.png">
+  <img src="images/train_graph.png">
   <caption>Whole training flow, including CNN model and other training operations like optimizer, saver, etc</caption>
 </p>
 
