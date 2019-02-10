@@ -98,7 +98,7 @@ And you can check the tensorboard summaries on `localhost:6006`.
 </p>
 
 
-## Predict Using the Trained Model
+## Predict Using Optimized Frozen Graph
 
 See `predict.py` for details and demo.
 
