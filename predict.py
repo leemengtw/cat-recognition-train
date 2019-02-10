@@ -54,11 +54,24 @@ def gen_kaggle_sub(model_path):
     print('\nDone')
 
 
+def main(m_path, i_path):
+    import numpy as np
+    p = Predictor(m_path)
+    catness = p.predict(i_path)
+    print("Catness: %f" % catness)
+    print("Cat Probability: %f" % (1 / (1 + np.exp(-catness))))
+    print("It's a %s." % ("cat" if catness > 0 else "dog"))
+
+
 if __name__ == '__main__':
     import argparse
     import os
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--path", type=str,
+        "--model_path", type=str,
         default=os.path.join("baseline_model", "optimized_net_best_acc.pb"))
-    gen_kaggle_sub(parser.parse_args().path)
+    parser.add_argument(
+        "--path", type=str, default=os.path.join("images", "test.png"))
+    # gen_kaggle_sub(parser.parse_args().path)
+    args = parser.parse_args()
+    main(args.model_path, args.path)
